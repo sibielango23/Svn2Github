@@ -1,0 +1,33 @@
+{
+  "svn": {
+    "url": "https://your-svn-server.com/repo",
+    "structure": "standard",
+    "trunk": "trunk",
+    "branches": "branches",
+    "tags": "tags"
+  },
+  "github": {
+    "org": "your-github-org",
+    "repo": "your-repo-name",
+    "private": true
+  },
+  "options": {
+    "authors_file": "authors.txt",
+    "author_domain": "company.com",
+    "clean_history": true,
+    "exclude_paths": [
+      "*.dll",
+      "*.exe",
+      "*.so",
+      "*.dylib",
+      "*.jar",
+      "*.war",
+      "build/*",
+      "dist/*",
+      "target/*",
+      "*.log"
+    ],
+    "max_file_size_mb": 100
+  },
+  "workspace": "./migration-workspace"
+}

@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <AssemblyName>SVN2GitHub</AssemblyName>
+    <RootNamespace>SVN2GitHub</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Material Design -->
+    <PackageReference Include="MaterialDesignThemes" Version="5.0.0" />
+    <PackageReference Include="MaterialDesignColors" Version="3.0.0" />
+
+    <!-- HTTP Client -->
+    <PackageReference Include="RestSharp" Version="111.4.1" />
+    <PackageReference Include="System.Net.Http.Json" Version="8.0.0" />
+
+    <!-- MVVM -->
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.2.2" />
+
+    <!-- Charts -->
+    <PackageReference Include="LiveChartsCore.SkiaSharpView.WPF" Version="2.0.0-rc2" />
+
+    <!-- WebSocket -->
+    <PackageReference Include="System.Net.WebSockets.Client" Version="4.3.2" />
+
+    <!-- JSON -->
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+
+    <!-- SQLite (for direct database access if needed) -->
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.0" />
+  </ItemGroup>
+
+</Project>

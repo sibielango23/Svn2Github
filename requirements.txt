@@ -1,0 +1,7 @@
+# Python dependencies for SVN to GitHub migration system
+
+# Core dependencies
+python>=3.8
+
+# Optional dependencies for enhanced features
+git-filter-repo>=2.38.0  # For history cleaning

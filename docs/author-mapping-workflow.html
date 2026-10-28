@@ -1,0 +1,650 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Author Mapping Workflow - SVN to GitHub Migration</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --surface-0: #0A0D12;
+            --surface-1: #0F131C;
+            --surface-2: #161D2B;
+            --surface-3: #1E2636;
+            --accent: #38BDF8;
+            --accent-dim: #0891B2;
+            --text: #E2E8F0;
+            --text-dim: #94A3B8;
+            --success: #10B981;
+            --warning: #F59E0B;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, system-ui, sans-serif;
+            background: var(--surface-0);
+            color: var(--text);
+            line-height: 1.6;
+            padding: 32px 16px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            font-size: clamp(2rem, 4vw, 3rem);
+            font-weight: 700;
+            margin-bottom: 16px;
+            background: linear-gradient(135deg, var(--accent), var(--accent-dim));
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .subtitle {
+            color: var(--text-dim);
+            font-size: 1.125rem;
+            margin-bottom: 48px;
+        }
+
+        .workflow {
+            display: grid;
+            gap: 24px;
+            margin-bottom: 48px;
+        }
+
+        .step {
+            background: var(--surface-2);
+            border-radius: 12px;
+            padding: 24px;
+            border: 1px solid rgba(56, 189, 248, 0.1);
+            transition: all 0.3s ease;
+        }
+
+        .step:hover {
+            border-color: var(--accent);
+            transform: translateY(-2px);
+        }
+
+        .step-header {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 16px;
+        }
+
+        .step-number {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--accent), var(--accent-dim));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 1.25rem;
+            flex-shrink: 0;
+        }
+
+        .step-title {
+            font-size: 1.5rem;
+            font-weight: 600;
+        }
+
+        .step-content {
+            padding-left: 64px;
+            color: var(--text-dim);
+        }
+
+        .code-block {
+            background: var(--surface-1);
+            border-radius: 8px;
+            padding: 16px;
+            margin: 16px 0;
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            font-size: 0.875rem;
+            overflow-x: auto;
+            border-left: 3px solid var(--accent);
+        }
+
+        .example-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 16px 0;
+            background: var(--surface-1);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .example-table th,
+        .example-table td {
+            padding: 12px 16px;
+            text-align: left;
+            border-bottom: 1px solid var(--surface-2);
+        }
+
+        .example-table th {
+            background: var(--surface-3);
+            font-weight: 600;
+            color: var(--accent);
+        }
+
+        .example-table tr:last-child td {
+            border-bottom: none;
+        }
+
+        .ui-preview {
+            background: var(--surface-1);
+            border-radius: 12px;
+            padding: 24px;
+            margin: 24px 0;
+            border: 2px dashed rgba(56, 189, 248, 0.3);
+        }
+
+        .ui-toolbar {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-bottom: 16px;
+        }
+
+        .ui-button {
+            padding: 8px 16px;
+            border-radius: 6px;
+            background: var(--surface-3);
+            border: 1px solid rgba(56, 189, 248, 0.3);
+            color: var(--text);
+            font-size: 0.875rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .ui-button:hover {
+            background: var(--accent);
+            color: var(--surface-0);
+        }
+
+        .ui-button.primary {
+            background: var(--accent);
+            color: var(--surface-0);
+            border-color: var(--accent);
+        }
+
+        .ui-search {
+            flex: 1;
+            min-width: 200px;
+            padding: 8px 16px;
+            background: var(--surface-3);
+            border: 1px solid rgba(56, 189, 248, 0.3);
+            border-radius: 6px;
+            color: var(--text);
+            font-size: 0.875rem;
+        }
+
+        .ui-grid {
+            background: var(--surface-2);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .ui-grid-header {
+            display: grid;
+            grid-template-columns: 2fr 2.5fr 3fr 1fr 1fr;
+            gap: 16px;
+            padding: 12px 16px;
+            background: var(--surface-3);
+            font-weight: 600;
+            font-size: 0.875rem;
+            color: var(--accent);
+        }
+
+        .ui-grid-row {
+            display: grid;
+            grid-template-columns: 2fr 2.5fr 3fr 1fr 1fr;
+            gap: 16px;
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--surface-3);
+            align-items: center;
+        }
+
+        .ui-grid-row:last-child {
+            border-bottom: none;
+        }
+
+        .ui-grid-row:hover {
+            background: rgba(56, 189, 248, 0.05);
+        }
+
+        .editable {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.875rem;
+        }
+
+        .verified-check {
+            color: var(--success);
+            font-size: 1.25rem;
+        }
+
+        .architecture-diagram {
+            background: var(--surface-1);
+            border-radius: 12px;
+            padding: 32px;
+            margin: 48px 0;
+        }
+
+        .diagram-layer {
+            display: flex;
+            justify-content: center;
+            gap: 24px;
+            margin: 24px 0;
+            flex-wrap: wrap;
+        }
+
+        .diagram-box {
+            background: var(--surface-2);
+            border: 2px solid var(--accent);
+            border-radius: 8px;
+            padding: 20px;
+            min-width: 200px;
+            text-align: center;
+            transition: all 0.3s ease;
+        }
+
+        .diagram-box:hover {
+            transform: scale(1.05);
+            box-shadow: 0 0 20px rgba(56, 189, 248, 0.3);
+        }
+
+        .diagram-box-title {
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: var(--accent);
+        }
+
+        .diagram-box-subtitle {
+            font-size: 0.875rem;
+            color: var(--text-dim);
+        }
+
+        .arrow-down {
+            text-align: center;
+            color: var(--accent);
+            font-size: 2rem;
+            margin: 8px 0;
+        }
+
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 24px;
+            margin: 48px 0;
+        }
+
+        .feature-card {
+            background: var(--surface-2);
+            border-radius: 12px;
+            padding: 24px;
+            border-left: 4px solid var(--accent);
+        }
+
+        .feature-icon {
+            font-size: 2rem;
+            margin-bottom: 12px;
+        }
+
+        .feature-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        .feature-desc {
+            color: var(--text-dim);
+        }
+
+        @media (max-width: 768px) {
+            .ui-grid-header,
+            .ui-grid-row {
+                grid-template-columns: 1fr;
+            }
+
+            .diagram-layer {
+                flex-direction: column;
+                align-items: center;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Author Mapping Workflow</h1>
+        <p class="subtitle">How SVN usernames are mapped to Git author identities in your WPF application</p>
+
+        <div class="workflow">
+            <!-- Step 1 -->
+            <div class="step">
+                <div class="step-header">
+                    <div class="step-number">1</div>
+                    <div class="step-title">User Opens Author Mapping</div>
+                </div>
+                <div class="step-content">
+                    <p>From the New Migration form, click <strong>"Configure"</strong> in the Author Mapping section.</p>
+                    <p style="margin-top: 12px;">The system opens the <strong>Author Mapping Window</strong> where you can review and edit all SVN to Git author mappings.</p>
+                </div>
+            </div>
+
+            <!-- Step 2 -->
+            <div class="step">
+                <div class="step-header">
+                    <div class="step-number">2</div>
+                    <div class="step-title">Extract Authors from SVN</div>
+                </div>
+                <div class="step-content">
+                    <p>Click <strong>"Load From SVN"</strong> button to automatically extract all unique authors from your repository's history.</p>
+
+                    <div class="code-block">svn log --quiet --limit 5000 https://your-svn-repo
+r1 | jdoe | 2010-01-15 10:30:00 ...
+r2 | asmith | 2010-01-16 14:22:00 ...
+r3 | bwilson | 2010-01-17 09:15:00 ...
+
+✓ Extracted 3 unique authors</div>
+
+                    <p style="margin-top: 12px;"><strong>Note:</strong> This may take 2-5 minutes for repositories with 15 years of history. The agent extracts from the last 5000 commits for performance.</p>
+                </div>
+            </div>
+
+            <!-- Step 3 -->
+            <div class="step">
+                <div class="step-header">
+                    <div class="step-number">3</div>
+                    <div class="step-title">Auto-Generate Git Identities</div>
+                </div>
+                <div class="step-content">
+                    <p>The system automatically converts SVN usernames to Git format using intelligent heuristics:</p>
+
+                    <table class="example-table">
+                        <thead>
+                            <tr>
+                                <th>SVN Username</th>
+                                <th>Generated Git Name</th>
+                                <th>Generated Git Email</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><code>jdoe</code></td>
+                                <td>Jdoe</td>
+                                <td>jdoe@example.com</td>
+                            </tr>
+                            <tr>
+                                <td><code>john.doe</code></td>
+                                <td>John Doe</td>
+                                <td>john.doe@example.com</td>
+                            </tr>
+                            <tr>
+                                <td><code>alice.m.smith</code></td>
+                                <td>Alice M Smith</td>
+                                <td>alice.m.smith@example.com</td>
+                            </tr>
+                        </tbody>
+                    </table>
+
+                    <p style="margin-top: 12px;"><strong>Algorithm:</strong> Split by dots, capitalize each part. Fallback to simple capitalization.</p>
+                </div>
+            </div>
+
+            <!-- Step 4 -->
+            <div class="step">
+                <div class="step-header">
+                    <div class="step-number">4</div>
+                    <div class="step-title">Review & Edit in UI</div>
+                </div>
+                <div class="step-content">
+                    <p>The WPF UI displays all authors in an editable grid:</p>
+
+                    <div class="ui-preview">
+                        <div class="ui-toolbar">
+                            <input type="text" class="ui-search" placeholder="Search authors..." />
+                            <button class="ui-button">Load From SVN</button>
+                            <button class="ui-button">Add Author</button>
+                            <div style="flex: 1"></div>
+                            <span style="align-self: center; color: var(--text-dim);">3 authors (2 verified)</span>
+                        </div>
+
+                        <div class="ui-grid">
+                            <div class="ui-grid-header">
+                                <div>SVN Username</div>
+                                <div>Git Name ✏️</div>
+                                <div>Git Email ✏️</div>
+                                <div>Verified</div>
+                                <div>Actions</div>
+                            </div>
+                            <div class="ui-grid-row">
+                                <div class="editable">jdoe</div>
+                                <div class="editable">John Doe</div>
+                                <div class="editable">john.doe@company.com</div>
+                                <div class="verified-check">✓</div>
+                                <div>🗑️</div>
+                            </div>
+                            <div class="ui-grid-row">
+                                <div class="editable">asmith</div>
+                                <div class="editable">Alice Smith</div>
+                                <div class="editable">alice.smith@company.com</div>
+                                <div class="verified-check">✓</div>
+                                <div>🗑️</div>
+                            </div>
+                            <div class="ui-grid-row">
+                                <div class="editable">bwilson</div>
+                                <div class="editable">Bwilson</div>
+                                <div class="editable">bwilson@example.com</div>
+                                <div style="color: var(--text-dim);">☐</div>
+                                <div>🗑️</div>
+                            </div>
+                        </div>
+
+                        <div style="margin-top: 16px; display: flex; justify-content: flex-end; gap: 12px;">
+                            <button class="ui-button">Export to File</button>
+                            <button class="ui-button primary">Save & Close</button>
+                        </div>
+                    </div>
+
+                    <p style="margin-top: 16px;"><strong>Actions:</strong></p>
+                    <ul style="margin-left: 24px; margin-top: 8px; color: var(--text-dim);">
+                        <li>Double-click any cell to edit</li>
+                        <li>Click checkboxes to mark as verified</li>
+                        <li>Search to filter by any field</li>
+                        <li>Click delete icon to remove</li>
+                        <li>Add button to manually insert authors</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Step 5 -->
+            <div class="step">
+                <div class="step-header">
+                    <div class="step-number">5</div>
+                    <div class="step-title">Save to Database</div>
+                </div>
+                <div class="step-content">
+                    <p>Click <strong>"Save & Close"</strong> to persist all mappings to SQLite database.</p>
+
+                    <div class="code-block">POST /api/authors/{migration_id}/bulk
+
+{
+  "authors": [
+    {
+      "svn_username": "jdoe",
+      "git_name": "John Doe",
+      "git_email": "john.doe@company.com",
+      "verified": true
+    },
+    ...
+  ]
+}
+
+✓ Saved 3 author mappings</div>
+                </div>
+            </div>
+
+            <!-- Step 6 -->
+            <div class="step">
+                <div class="step-header">
+                    <div class="step-number">6</div>
+                    <div class="step-title">Generate authors.txt</div>
+                </div>
+                <div class="step-content">
+                    <p>During migration, the system exports authors to <code>authors.txt</code> file in git-svn format:</p>
+
+                    <div class="code-block">jdoe = John Doe &lt;john.doe@company.com&gt;
+asmith = Alice Smith &lt;alice.smith@company.com&gt;
+bwilson = Bob Wilson &lt;bob.wilson@company.com&gt;</div>
+
+                    <p style="margin-top: 12px;">This file is used by <code>git-svn clone --authors-file=authors.txt</code> to properly attribute commits.</p>
+                </div>
+            </div>
+
+            <!-- Step 7 -->
+            <div class="step">
+                <div class="step-header">
+                    <div class="step-number">7</div>
+                    <div class="step-title">Migration Runs</div>
+                </div>
+                <div class="step-content">
+                    <p>The migration agent uses the authors file to convert SVN commits to Git commits with proper attribution:</p>
+
+                    <div class="code-block">git svn clone https://svn-repo \
+  --authors-file=authors.txt \
+  --stdlayout \
+  --prefix=svn/
+
+Converting SVN commits to Git...
+r1 = abc123 (jdoe → John Doe &lt;john.doe@company.com&gt;)
+r2 = def456 (asmith → Alice Smith &lt;alice.smith@company.com&gt;)
+✓ Migration complete!</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Architecture Diagram -->
+        <h2 style="font-size: 2rem; margin-bottom: 24px; text-align: center;">System Architecture</h2>
+        <div class="architecture-diagram">
+            <div class="diagram-layer">
+                <div class="diagram-box">
+                    <div class="diagram-box-title">WPF UI</div>
+                    <div class="diagram-box-subtitle">Author Mapping Window</div>
+                </div>
+            </div>
+
+            <div class="arrow-down">↓</div>
+
+            <div class="diagram-layer">
+                <div class="diagram-box">
+                    <div class="diagram-box-title">FastAPI Server</div>
+                    <div class="diagram-box-subtitle">/api/authors endpoints</div>
+                </div>
+            </div>
+
+            <div class="arrow-down">↓</div>
+
+            <div class="diagram-layer">
+                <div class="diagram-box">
+                    <div class="diagram-box-title">SQLite Database</div>
+                    <div class="diagram-box-subtitle">authors table</div>
+                </div>
+                <div class="diagram-box">
+                    <div class="diagram-box-title">Author Mapper Agent</div>
+                    <div class="diagram-box-subtitle">Python extraction script</div>
+                </div>
+            </div>
+
+            <div class="arrow-down">↓</div>
+
+            <div class="diagram-layer">
+                <div class="diagram-box">
+                    <div class="diagram-box-title">authors.txt</div>
+                    <div class="diagram-box-subtitle">git-svn format file</div>
+                </div>
+            </div>
+
+            <div class="arrow-down">↓</div>
+
+            <div class="diagram-layer">
+                <div class="diagram-box">
+                    <div class="diagram-box-title">git-svn clone</div>
+                    <div class="diagram-box-subtitle">Migration with proper authors</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Features -->
+        <h2 style="font-size: 2rem; margin: 48px 0 24px;">Key Features</h2>
+        <div class="features-grid">
+            <div class="feature-card">
+                <div class="feature-icon">🤖</div>
+                <div class="feature-title">Automatic Extraction</div>
+                <div class="feature-desc">Scans entire SVN history (up to 5000 commits) to extract all unique authors automatically.</div>
+            </div>
+
+            <div class="feature-card">
+                <div class="feature-icon">✨</div>
+                <div class="feature-title">Smart Generation</div>
+                <div class="feature-desc">Intelligently converts usernames like "john.doe" to "John Doe" with proper capitalization.</div>
+            </div>
+
+            <div class="feature-card">
+                <div class="feature-icon">✏️</div>
+                <div class="feature-title">Interactive Editing</div>
+                <div class="feature-desc">Full-featured grid with search, inline editing, verification checkboxes, and manual additions.</div>
+            </div>
+
+            <div class="feature-card">
+                <div class="feature-icon">💾</div>
+                <div class="feature-title">Persistent Storage</div>
+                <div class="feature-desc">All mappings saved to database and available across sessions and migrations.</div>
+            </div>
+
+            <div class="feature-card">
+                <div class="feature-icon">📤</div>
+                <div class="feature-title">Export Capability</div>
+                <div class="feature-desc">Export to standard authors.txt format for use with external git-svn tools.</div>
+            </div>
+
+            <div class="feature-card">
+                <div class="feature-icon">🔄</div>
+                <div class="feature-title">Real-time Updates</div>
+                <div class="feature-desc">Edit authors during migration; changes apply immediately without restarting.</div>
+            </div>
+        </div>
+
+        <!-- API Reference -->
+        <h2 style="font-size: 2rem; margin: 48px 0 24px;">API Endpoints</h2>
+        <div style="display: grid; gap: 16px;">
+            <div style="background: var(--surface-2); padding: 20px; border-radius: 8px; border-left: 4px solid var(--success);">
+                <div style="font-family: monospace; color: var(--success); font-weight: 600; margin-bottom: 8px;">GET /api/authors/{migration_id}</div>
+                <div style="color: var(--text-dim);">Retrieve all author mappings for a migration</div>
+            </div>
+
+            <div style="background: var(--surface-2); padding: 20px; border-radius: 8px; border-left: 4px solid var(--warning);">
+                <div style="font-family: monospace; color: var(--warning); font-weight: 600; margin-bottom: 8px;">POST /api/authors/{migration_id}/extract</div>
+                <div style="color: var(--text-dim);">Extract authors from SVN repository and generate default mappings</div>
+            </div>
+
+            <div style="background: var(--surface-2); padding: 20px; border-radius: 8px; border-left: 4px solid var(--warning);">
+                <div style="font-family: monospace; color: var(--warning); font-weight: 600; margin-bottom: 8px;">POST /api/authors/{migration_id}/bulk</div>
+                <div style="color: var(--text-dim);">Bulk update all author mappings at once</div>
+            </div>
+
+            <div style="background: var(--surface-2); padding: 20px; border-radius: 8px; border-left: 4px solid var(--success);">
+                <div style="font-family: monospace; color: var(--success); font-weight: 600; margin-bottom: 8px;">GET /api/authors/{migration_id}/export</div>
+                <div style="color: var(--text-dim);">Export authors in git-svn compatible authors.txt format</div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
