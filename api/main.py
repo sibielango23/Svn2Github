@@ -23,6 +23,7 @@ app.add_middleware(
 
 # In-memory storage (replace with database in production)
 migrations: Dict[str, dict] = {}
+authors: List[Dict[str, str]] = []
 
 class MigrationStatus(str, Enum):
     PENDING = "pending"
@@ -156,6 +157,18 @@ async def get_stats():
         "completed": completed,
         "failed": failed
     }
+
+@app.get("/api/authors")
+async def get_authors():
+    """Get all author mappings"""
+    return authors
+
+@app.post("/api/authors")
+async def save_authors(author_list: List[Dict[str, str]]):
+    """Save author mappings"""
+    global authors
+    authors = author_list
+    return authors
 
 
 async def run_migration(migration_id: str):
@@ -313,4 +326,4 @@ if __name__ == "__main__":
     import uvicorn
     # Create temp directory
     os.makedirs("D:\\Svn2Github\\temp", exist_ok=True)
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=5000)
