@@ -40,6 +40,9 @@ namespace SVN2GitHub.ViewModels
         [ObservableProperty]
         private string? _currentMigrationId = null;
 
+        public List<AuthorCreateRequest> PreparedAuthors { get; private set; } = new();
+        public string? PreparedAuthorsSvnUrl { get; private set; }
+
         public NewMigrationViewModel()
         {
             _apiService = new ApiService();
@@ -74,6 +77,14 @@ namespace SVN2GitHub.ViewModels
                 return;
             }
 
+            if (PreparedAuthors.Count > 0 &&
+                !string.Equals(PreparedAuthorsSvnUrl, SvnUrl, StringComparison.OrdinalIgnoreCase))
+            {
+                _notificationService.ShowWarning(
+                    "The SVN URL changed after author mappings were prepared. Configure authors again before starting.");
+                return;
+            }
+
             // Confirm before starting
             var confirmed = _notificationService.ShowConfirmation(
                 $"Start migration from:\n{SvnUrl}\n\nto:\n{GithubOrg}/{GithubRepo}?\n\n" +
@@ -95,11 +106,14 @@ namespace SVN2GitHub.ViewModels
                     TrunkPath = TrunkPath,
                     BranchesPath = BranchesPath,
                     TagsPath = TagsPath,
-                    CleanHistory = CleanHistory
+                    CleanHistory = CleanHistory,
+                    Authors = PreparedAuthors
                 };
 
                 var response = await _apiService.CreateMigrationAsync(request);
                 CurrentMigrationId = response.Id;
+                PreparedAuthors = new List<AuthorCreateRequest>();
+                PreparedAuthorsSvnUrl = null;
 
                 _notificationService.ShowSuccess(
                     $"Migration started successfully!\n\nID: {response.Id}\n\n" +
@@ -132,6 +146,20 @@ namespace SVN2GitHub.ViewModels
             BranchesPath = "branches";
             TagsPath = "tags";
             CleanHistory = false;
+            PreparedAuthors = new List<AuthorCreateRequest>();
+            PreparedAuthorsSvnUrl = null;
+        }
+
+        public void SetPreparedAuthors(IEnumerable<Author> authors, string svnUrl)
+        {
+            PreparedAuthors = authors.Select(author => new AuthorCreateRequest
+            {
+                SvnUsername = author.SvnUsername,
+                GitName = author.GitName,
+                GitEmail = author.GitEmail,
+                Verified = author.Verified
+            }).ToList();
+            PreparedAuthorsSvnUrl = svnUrl;
         }
     }
 }

@@ -4,6 +4,7 @@ using System.Collections.ObjectModel;
 using System.Windows;
 using SVN2GitHub.Services;
 using SVN2GitHub.Models;
+using SVN2GitHub.Views;
 
 namespace SVN2GitHub.ViewModels
 {
@@ -11,6 +12,8 @@ namespace SVN2GitHub.ViewModels
     {
         private readonly ApiService _apiService;
         private readonly NotificationService _notificationService;
+        private readonly AiProviderSettingsStore _aiSettingsStore = new();
+        private readonly AiAssistantService _aiAssistantService = new();
 
         [ObservableProperty]
         private int _totalMigrations = 0;
@@ -58,7 +61,7 @@ namespace SVN2GitHub.ViewModels
                 {
                     StatusMessage = "⚠️ API server not running. Please start the API.";
                     _notificationService.ShowWarning(
-                        "The API server is not running. Please start it with:\npython api/main.py",
+                        "The API server is not running. Please start it with:\n.\\start-api.ps1",
                         "API Not Available");
                     return;
                 }
@@ -115,6 +118,67 @@ namespace SVN2GitHub.ViewModels
             catch (Exception ex)
             {
                 _notificationService.ShowError($"Failed to load migration details: {ex.Message}");
+            }
+        }
+
+        [RelayCommand]
+        private void ConfigureAi()
+        {
+            var dialog = new AiSettingsWindow
+            {
+                Owner = Application.Current.MainWindow
+            };
+
+            if (dialog.ShowDialog() == true)
+            {
+                StatusMessage = "AI assistant settings saved.";
+            }
+        }
+
+        [RelayCommand]
+        private async Task AskAi(MigrationDetail migration)
+        {
+            if (migration == null)
+            {
+                return;
+            }
+
+            try
+            {
+                var settings = _aiSettingsStore.Load();
+                if (settings == null)
+                {
+                    _notificationService.ShowWarning(
+                        "Configure an AI provider and API key before using the migration assistant.",
+                        "AI Assistant Not Configured");
+                    return;
+                }
+
+                var detail = await _apiService.GetMigrationAsync(migration.Id);
+                if (detail == null)
+                {
+                    _notificationService.ShowError(
+                        "Could not load the latest migration details and logs.",
+                        "Migration Unavailable");
+                    return;
+                }
+
+                var viewModel = new AiAssistantViewModel(
+                    detail,
+                    settings,
+                    _aiAssistantService,
+                    _notificationService);
+                var window = new AiAssistantWindow(viewModel)
+                {
+                    Owner = Application.Current.MainWindow
+                };
+                window.ShowDialog();
+            }
+            catch (Exception exception)
+            {
+                _notificationService.ShowError(
+                    $"Could not open the AI assistant: {exception.Message}",
+                    "AI Assistant Error");
             }
         }
     }

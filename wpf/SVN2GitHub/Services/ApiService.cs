@@ -10,7 +10,7 @@ namespace SVN2GitHub.Services
         private readonly HttpClient _httpClient;
         private readonly string _baseUrl;
 
-        public ApiService(string baseUrl = "http://localhost:5000")
+        public ApiService(string baseUrl = "http://127.0.0.1:5000")
         {
             _baseUrl = baseUrl;
             _httpClient = new HttpClient
@@ -97,6 +97,20 @@ namespace SVN2GitHub.Services
             {
                 return new List<Author>();
             }
+        }
+
+        public async Task PrepareAuthorSessionAsync(string sessionId, string svnUrl)
+        {
+            var response = await _httpClient.PostAsJsonAsync(
+                $"/api/authors/{sessionId}/session",
+                new { SvnUrl = svnUrl });
+            response.EnsureSuccessStatusCode();
+        }
+
+        public async Task CloseAuthorSessionAsync(string sessionId)
+        {
+            var response = await _httpClient.DeleteAsync($"/api/authors/{sessionId}/session");
+            response.EnsureSuccessStatusCode();
         }
 
         public async Task<List<Author>> ExtractAuthorsAsync(string migrationId)

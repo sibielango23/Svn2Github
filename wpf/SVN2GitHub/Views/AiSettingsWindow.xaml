@@ -1,0 +1,83 @@
+<Window x:Class="SVN2GitHub.Views.AiSettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
+        Title="AI Assistant Settings"
+        Width="560"
+        Height="490"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize">
+    <Grid Margin="24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0"
+                   Text="AI Assistant Settings"
+                   Style="{StaticResource MaterialDesignHeadline5TextBlock}"
+                   Margin="0,0,0,8"/>
+        <TextBlock Grid.Row="1"
+                   Text="Your API key is encrypted for this Windows user and sent directly from this app to the selected provider."
+                   TextWrapping="Wrap"
+                   Opacity="0.8"
+                   Margin="0,0,0,18"/>
+
+        <StackPanel Grid.Row="2" Margin="0,0,0,12">
+            <TextBlock Text="Provider" Margin="0,0,0,4"/>
+            <ComboBox x:Name="ProviderBox"
+                      SelectedIndex="0"
+                      SelectionChanged="ProviderBox_SelectionChanged">
+                <ComboBoxItem Content="OpenAI"/>
+                <ComboBoxItem Content="Anthropic (Claude)"/>
+            </ComboBox>
+        </StackPanel>
+
+        <StackPanel Grid.Row="3" Margin="0,0,0,12">
+            <TextBlock Text="Model ID" Margin="0,0,0,4"/>
+            <TextBox x:Name="ModelBox"
+                     Text="gpt-4o-mini"
+                     materialDesign:HintAssist.Hint="Enter a model ID available to your provider account"/>
+            <TextBlock Text="OpenAI starts with gpt-4o-mini; enter a current Claude model ID when using Anthropic."
+                       Style="{StaticResource MaterialDesignCaptionTextBlock}"
+                       Opacity="0.7"
+                       Margin="0,4,0,0"/>
+        </StackPanel>
+
+        <StackPanel Grid.Row="4" VerticalAlignment="Top">
+            <TextBlock Text="API key (leave blank to keep the saved key)" Margin="0,0,0,4"/>
+            <PasswordBox x:Name="ApiKeyBox"/>
+            <TextBlock x:Name="KeyStatusText"
+                       Text="No API key is saved."
+                       Margin="0,6,0,0"
+                       Opacity="0.75"/>
+            <TextBlock Text="Migration context is shared only after you review the preview and approve each request. Avoid sending confidential repository information unless your organization's policy permits it."
+                       TextWrapping="Wrap"
+                       Margin="0,18,0,0"
+                       Opacity="0.8"/>
+            <TextBlock x:Name="StatusText"
+                       TextWrapping="Wrap"
+                       Margin="0,12,0,0"
+                       Foreground="IndianRed"/>
+        </StackPanel>
+
+        <StackPanel Grid.Row="5"
+                    Orientation="Horizontal"
+                    HorizontalAlignment="Right"
+                    VerticalAlignment="Bottom"
+                    Margin="0,18,0,0">
+            <Button Content="CANCEL"
+                    IsCancel="True"
+                    Style="{StaticResource MaterialDesignFlatButton}"
+                    Margin="0,0,8,0"/>
+            <Button Content="SAVE"
+                    IsDefault="True"
+                    Click="SaveButton_Click"
+                    Style="{StaticResource MaterialDesignRaisedButton}"/>
+        </StackPanel>
+    </Grid>
+</Window>

@@ -1,319 +1,46 @@
-# Getting Started with SVN to GitHub Migration
+# Getting Started
 
-## What This System Does
+## 1. Prepare the machine
 
-This multi-agent system automates the complete migration of an SVN repository to GitHub, preserving:
-- ✅ All 15 years of commit history
-- ✅ All branches and tags
-- ✅ Author information and timestamps
-- ✅ Commit messages
+Install the prerequisites in [SETUP.md](SETUP.md). For an actual migration,
+verify `git svn --version`, `svn --version`, and `gh --version` before opening
+the application.
 
-## Prerequisites Checklist
+## 2. Build and launch
 
-Before starting, ensure you have:
+From PowerShell at the repository root:
 
-- [ ] Git installed with git-svn support (`git svn --version` should work)
-- [ ] SVN client installed (`svn --version` should work)
-- [ ] GitHub CLI installed and authenticated (`gh auth status` should show logged in)
-- [ ] Python 3.8 or higher (`python --version`)
-- [ ] Access to your SVN repository (can run `svn info <url>`)
-- [ ] GitHub organization/account where you'll create the new repository
-- [ ] Sufficient disk space (estimate 2-3x your SVN repository size)
-
-## Installation Steps
-
-1. **Navigate to this directory**
-   ```bash
-   cd D:\Svn2Github
-   ```
-
-2. **Install Python dependencies** (optional, for history cleaning)
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-3. **Authenticate with GitHub**
-   ```bash
-   gh auth login
-   ```
-
-## Quick Start - Three Methods
-
-### Method 1: Automated Quick Start (Easiest)
-
-**Windows:**
 ```powershell
-.\quickstart.ps1 -SvnUrl "https://your-svn-server.com/repo" `
-                 -GitHubOrg "your-github-org" `
-                 -GitHubRepo "your-repo-name"
+dotnet build wpf\SVN2GitHub.sln --configuration Debug
+.\start.ps1
 ```
 
-**Linux/macOS:**
-```bash
-./quickstart.sh https://your-svn-server.com/repo your-github-org your-repo-name
-```
+The launcher starts the local .NET API at `http://127.0.0.1:5000`, checks its
+health endpoint, and opens the WPF application.
 
-This will:
-1. Check all prerequisites
-2. Generate configuration
-3. Run complete migration
-4. Create GitHub repository
-5. Push all history
+## 3. Prepare a safe test migration
 
-### Method 2: Custom Configuration
+Use a disposable SVN repository and a GitHub repository created specifically
+for testing. Confirm that the token has the required access, review the target
+repository visibility, and check available disk space before starting. Do not
+use a production repository for the first end-to-end test.
 
-1. **Copy example configuration:**
-   ```bash
-   cp migration-config.example.json migration-config.json
-   ```
+In the WPF app:
 
-2. **Edit migration-config.json:**
-   ```json
-   {
-     "svn": {
-       "url": "https://your-svn-server.com/your-repo"
-     },
-     "github": {
-       "org": "your-github-org",
-       "repo": "your-repo-name"
-     }
-   }
-   ```
+1. Enter the SVN URL and GitHub destination.
+2. Extract and review author mappings; correct names and email addresses.
+3. Choose whether to clean history. Cleaning rewrites commit IDs and is
+   irreversible for the migrated copy.
+4. Review the migration details and submit the job.
+5. Watch the dashboard and verify the final remote branches and tags.
 
-3. **Run migration:**
-   ```bash
-   python orchestrator.py --config migration-config.json
-   ```
+## 4. Know the current limitations
 
-### Method 3: Step-by-Step (Most Control)
+- The API is a local, single-user pilot and must remain on loopback.
+- Running jobs cannot currently be cancelled safely or resumed after a
+  backend restart.
+- The migration workflow depends on external SVN, Git, and GitHub CLI tools.
+- Real external migration acceptance testing is still required.
 
-Run each agent manually:
-
-```bash
-# Create config
-cp migration-config.example.json migration-config.json
-# Edit as needed
-
-# 1. Analyze SVN repository
-cat migration-config.json | python agents/repository_analyzer.py
-
-# 2. Create author mapping
-cat migration-config.json | python agents/author_mapper.py
-
-# Review and edit: migration-workspace/authors.txt
-
-# 3. Execute migration (LONGEST STEP - hours to days)
-cat migration-config.json | python agents/migration_executor.py
-
-# 4. Optional: Clean history
-cat migration-config.json | python agents/history_cleaner.py
-
-# 5. Create GitHub repository
-cat migration-config.json | python agents/github_setup.py
-
-# 6. Push and verify
-cat migration-config.json | python agents/push_verifier.py
-```
-
-## Monitoring Progress
-
-### Check current status:
-```bash
-python monitor.py
-```
-
-### Watch continuously:
-```bash
-python monitor.py --watch
-```
-
-### View logs:
-```bash
-tail -f migration.log
-```
-
-## Expected Timeline
-
-For a 15-year repository with typical activity:
-
-| Phase | Duration | Notes |
-|-------|----------|-------|
-| Analysis | 5-30 minutes | Fast |
-| Author Mapping | 5-10 minutes | Fast |
-| **Migration Execution** | **10-24 hours** | **Longest step** |
-| History Cleaning | 15-60 minutes | Optional |
-| GitHub Setup | 2-5 minutes | Fast |
-| Push & Verify | 10-30 minutes | Depends on size |
-
-**Total estimated time: 12-26 hours**
-
-The migration runs unattended - you can leave it overnight.
-
-## During Migration
-
-**DO:**
-- ✅ Leave the migration running
-- ✅ Monitor with `python monitor.py`
-- ✅ Check disk space periodically
-- ✅ Keep SVN repository accessible
-
-**DON'T:**
-- ❌ Stop the process (unless necessary)
-- ❌ Modify files in migration-workspace/
-- ❌ Make changes to the SVN repository during migration
-
-## After Migration
-
-1. **Verify the migration:**
-   - Check GitHub repository: `https://github.com/your-org/your-repo`
-   - Compare commit count: `cd migration-workspace/migrated-repo && git log --oneline | wc -l`
-   - Review migration report: `cat migration-workspace/migration-report.json`
-
-2. **Review author mappings:**
-   - Check if authors are correctly mapped
-   - Update if needed and re-push
-
-3. **Configure GitHub repository:**
-   - Set up branch protection
-   - Add collaborators
-   - Configure GitHub Actions
-   - Add README, LICENSE if needed
-
-4. **Update your team:**
-   - Notify about new repository location
-   - Update CI/CD pipelines
-   - Update documentation links
-
-5. **Archive (don't delete) SVN repository:**
-   - Keep SVN accessible for reference
-   - Consider read-only access
-   - Document the migration in both places
-
-## If Something Goes Wrong
-
-### Migration fails or stops
-
-**Resume git-svn clone:**
-```bash
-cd migration-workspace/migrated-repo
-git svn fetch
-```
-
-This continues from where it stopped.
-
-### Out of memory
-
-- Use a machine with more RAM (16GB+ recommended)
-- Close other applications
-- Consider incremental migration
-
-### Wrong authors
-
-1. Edit `migration-workspace/authors.txt`
-2. Delete `migration-workspace/migrated-repo`
-3. Re-run migration executor
-
-### Network timeout
-
-The migration will resume from the last successful revision. Just restart it.
-
-## Common Configuration Options
-
-### Standard SVN layout (trunk/branches/tags):
-```json
-{
-  "svn": {
-    "url": "https://svn.example.com/repo",
-    "structure": "standard"
-  }
-}
-```
-
-### Non-standard SVN layout:
-```json
-{
-  "svn": {
-    "url": "https://svn.example.com/repo",
-    "structure": "non-standard",
-    "trunk": "main",
-    "branches": "branch",
-    "tags": "release"
-  }
-}
-```
-
-### Remove large files from history:
-```json
-{
-  "options": {
-    "clean_history": true,
-    "max_file_size_mb": 50,
-    "exclude_paths": [
-      "*.dll",
-      "*.exe",
-      "build/*",
-      "dist/*"
-    ]
-  }
-}
-```
-
-## Getting Help
-
-1. **Check documentation:**
-   - [MIGRATION_GUIDE.md](MIGRATION_GUIDE.md) - Comprehensive guide
-   - [ARCHITECTURE.md](ARCHITECTURE.md) - System details
-   - [FLOW_DIAGRAM.md](FLOW_DIAGRAM.md) - Visual workflow
-
-2. **Review logs:**
-   - `migration.log` - Main log file
-   - `migration-workspace/migration-report.json` - Final report
-
-3. **Test first:**
-   - Try with a small test repository
-   - Verify the process before migrating production
-
-## Success Criteria
-
-Migration is successful when:
-- ✅ All commits are in GitHub (compare counts)
-- ✅ All branches are present
-- ✅ All tags are present
-- ✅ Commit authors are correctly attributed
-- ✅ Timestamps are preserved
-- ✅ Commit messages are intact
-- ✅ File contents match SVN HEAD
-
-## Next Steps After Successful Migration
-
-1. **Security:**
-   - Review who has access
-   - Set up branch protection rules
-   - Enable security scanning
-
-2. **Automation:**
-   - Set up GitHub Actions
-   - Configure CI/CD pipelines
-   - Add automated testing
-
-3. **Documentation:**
-   - Update README
-   - Document the migration
-   - Update wiki/documentation links
-
-4. **Team:**
-   - Train team on Git workflows
-   - Update development processes
-   - Archive SVN credentials
-
-## Support Resources
-
-- [Git-SVN Documentation](https://git-scm.com/docs/git-svn)
-- [GitHub CLI Manual](https://cli.github.com/manual/)
-- [Git Filter-Repo](https://github.com/newren/git-filter-repo)
-
----
-
-**Remember:** Always test the migration process with a small repository first before running it on your production SVN repository with 15 years of history.
-
-**Good luck with your migration!** 🚀
+See the [migration guide](MIGRATION_GUIDE.md) for preflight and recovery
+guidance.

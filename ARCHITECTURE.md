@@ -1,293 +1,62 @@
-# SVN to GitHub Migration - Multi-Agent System
+# Architecture
 
-## Project Structure
+## Components
 
-```
-svn2github/
-├── README.md                    # Project overview
-├── MIGRATION_GUIDE.md          # Detailed migration guide
-├── orchestrator.py             # Main orchestration script
-├── quickstart.sh               # Linux/macOS quick start
-├── quickstart.ps1              # Windows quick start
-├── migration-config.example.json  # Example configuration
-├── agents/                     # Agent implementations
-│   ├── __init__.py
-│   ├── repository_analyzer.py  # Analyzes SVN structure
-│   ├── author_mapper.py        # Maps SVN authors to Git
-│   ├── migration_executor.py   # Executes git-svn clone
-│   ├── history_cleaner.py      # Cleans repository history
-│   ├── github_setup.py         # Creates GitHub repository
-│   ├── push_verifier.py        # Pushes and verifies
-│   └── agent_template.py       # Template for custom agents
-└── migration-workspace/        # Working directory (created)
-    ├── analysis-results.json
-    ├── authors.txt
-    ├── migrated-repo/          # Converted Git repository
-    └── migration-report.json
+```text
+WPF desktop application
+  └── ApiService (HTTP, camelCase JSON)
+        └── ASP.NET Core API (127.0.0.1:5000)
+              ├── MigrationStateStore (SQLite)
+              ├── MigrationQueue (single reader)
+              └── Migration workflow services
+                    ├── RepositoryAnalyzer
+                    ├── AuthorMapper
+                    ├── MigrationExecutor
+                    ├── HistoryCleaner
+                    ├── GitHubSetup
+                    └── PushVerifier
 ```
 
-## Agent Architecture
+The migration workflow is implemented in C# in
+`backend/SVN2GitHub.Api/Services/MigrationAgents.cs`. SVN and Git operations
+remain external command-line tools invoked through
+`ExternalCommandRunner.cs`.
 
-### Agent Communication
+## Migration lifecycle
 
-Agents communicate via:
-- **Input**: JSON configuration via stdin
-- **Output**: JSON results via stdout
-- **Logging**: Progress messages to stderr
+The API validates a request, persists the job without its GitHub token, and
+queues the in-memory request for sequential execution. Each step updates
+SQLite-backed progress and logs. Tokens are retained only in process memory
+for the active job and are passed to GitHub CLI/Git through environment
+variables.
 
-### Agent Lifecycle
+The workflow analyzes SVN structure and authors, creates an authors file,
+imports history with `git-svn`, maps imported remote refs to local branches
+and tags, optionally cleans history, creates/configures a GitHub repository,
+pushes refs, and compares local and remote ref names and object IDs.
 
-```
-Orchestrator
-    ↓
-Configuration → Agent (stdin)
-    ↓
-Agent Processing
-    ↓
-Results → Orchestrator (stdout)
-    ↓
-Next Agent
-```
+## Persistence and recovery
 
-### Creating Custom Agents
+The .NET store uses the existing SQLite `migration_state` table and reads
+legacy snake_case or camelCase records. On restart, active jobs are marked
+interrupted because external process recovery and safe resume are not
+implemented. The database is local application data and should be backed up
+before manual edits.
 
-1. Copy `agents/agent_template.py`
-2. Implement your logic in `execute()` method
-3. Read config from `json.load(sys.stdin)`
-4. Output results with `print(json.dumps(results))`
-5. Add to orchestrator pipeline
+## Security boundary
 
-Example custom agent:
+The API binds to loopback and has no authentication; it is not a network
+service. Embedded credentials in SVN URLs are rejected. GitHub tokens are
+excluded from the SQLite record and logs, but are necessarily present in
+process memory while the job runs. The optional AI assistant runs in the WPF
+client and sends only user-approved context directly to the configured
+provider.
 
-```python
-#!/usr/bin/env python3
-import json
-import sys
+## External dependencies and limitations
 
-class NotificationAgent:
-    def __init__(self, config):
-        self.config = config
-    
-    def execute(self):
-        # Send notification
-        return {
-            'success': True,
-            'notified': True
-        }
-
-def main():
-    config = json.load(sys.stdin)
-    agent = NotificationAgent(config)
-    print(json.dumps(agent.execute()))
-
-if __name__ == '__main__':
-    main()
-```
-
-## Configuration Schema
-
-```json
-{
-  "svn": {
-    "url": "string (required)",
-    "structure": "standard|non-standard",
-    "trunk": "string (default: trunk)",
-    "branches": "string (default: branches)",
-    "tags": "string (default: tags)"
-  },
-  "github": {
-    "org": "string (required)",
-    "repo": "string (required)",
-    "private": "boolean (default: true)"
-  },
-  "options": {
-    "authors_file": "string (default: authors.txt)",
-    "author_domain": "string (default: example.com)",
-    "clean_history": "boolean (default: false)",
-    "exclude_paths": ["array of glob patterns"],
-    "max_file_size_mb": "number (default: 100)"
-  },
-  "workspace": "string (default: ./migration-workspace)"
-}
-```
-
-## Running Individual Agents
-
-### 1. Repository Analyzer
-```bash
-cat config.json | python agents/repository_analyzer.py
-```
-Output: SVN structure, branches, tags, authors
-
-### 2. Author Mapper
-```bash
-cat config.json | python agents/author_mapper.py
-```
-Output: authors.txt file with SVN → Git mappings
-
-### 3. Migration Executor
-```bash
-cat config.json | python agents/migration_executor.py
-```
-Output: Git repository in workspace
-
-### 4. History Cleaner
-```bash
-cat config.json | python agents/history_cleaner.py
-```
-Output: Cleaned repository (rewrites history)
-
-### 5. GitHub Setup
-```bash
-cat config.json | python agents/github_setup.py
-```
-Output: GitHub repository created
-
-### 6. Push Verifier
-```bash
-cat config.json | python agents/push_verifier.py
-```
-Output: Verification results
-
-## Advanced Usage
-
-### Parallel Agent Execution
-
-While the orchestrator runs agents sequentially, you can parallelize independent agents:
-
-```bash
-# Run analysis and GitHub setup in parallel
-cat config.json | python agents/repository_analyzer.py &
-cat config.json | python agents/github_setup.py &
-wait
-```
-
-### Incremental Migration
-
-For very large repositories, migrate incrementally:
-
-```bash
-# Migrate last 1000 revisions only
-git svn clone -r 99000:HEAD <url>
-```
-
-### Custom Pipeline
-
-Create your own orchestration:
-
-```python
-from pathlib import Path
-import subprocess
-import json
-
-def run_custom_pipeline():
-    config = json.load(open('config.json'))
-    
-    # Custom agent sequence
-    agents = [
-        'repository_analyzer',
-        'my_custom_agent',
-        'migration_executor',
-        'github_setup'
-    ]
-    
-    for agent in agents:
-        result = subprocess.run(
-            ['python', f'agents/{agent}.py'],
-            input=json.dumps(config),
-            capture_output=True,
-            text=True
-        )
-        print(f"{agent}: {result.stdout}")
-```
-
-## Monitoring and Debugging
-
-### Check Agent Status
-
-```bash
-# Watch migration progress
-tail -f migration.log
-
-# Monitor disk usage
-du -sh migration-workspace/
-
-# Count migrated commits
-cd migration-workspace/migrated-repo
-git log --oneline | wc -l
-```
-
-### Debug Agent Failures
-
-```bash
-# Run agent with verbose logging
-cat config.json | python -u agents/migration_executor.py 2>&1 | tee debug.log
-
-# Check agent output
-cat debug.log | grep ERROR
-```
-
-### Resume Failed Migration
-
-```bash
-# Resume git-svn fetch
-cd migration-workspace/migrated-repo
-git svn fetch
-
-# Or restart from specific agent
-cat config.json | python agents/push_verifier.py
-```
-
-## Performance Optimization
-
-### Large Repository (>100k commits)
-
-1. **Use fast disk**: SSD recommended
-2. **Increase memory**: 16GB+ RAM
-3. **Shallow clone**: Use revision ranges
-4. **Filter paths**: Migrate specific directories only
-
-### Network Optimization
-
-For slow SVN connections:
-- Run migration on server close to SVN
-- Use `--authors-prog` instead of `--authors-file`
-- Enable HTTP compression
-
-## Security Considerations
-
-1. **Credentials**: Use SSH keys, not passwords
-2. **Private repos**: Set `"private": true` in config
-3. **Sensitive data**: Review history before pushing
-4. **Author emails**: Verify author mappings
-
-## Integration with CI/CD
-
-Add post-migration setup:
-
-```bash
-# After migration, set up GitHub Actions
-gh workflow run setup-ci.yml
-
-# Configure branch protection
-gh api repos/{org}/{repo}/branches/main/protection \
-  --method PUT \
-  --input protection.json
-```
-
-## Troubleshooting
-
-See [MIGRATION_GUIDE.md](MIGRATION_GUIDE.md#troubleshooting) for common issues and solutions.
-
-## Contributing
-
-To add a new agent:
-
-1. Create `agents/your_agent.py` using template
-2. Update orchestrator.py to include it
-3. Add documentation
-4. Test with example repository
-
-## License
-
-MIT License - see LICENSE file
+- Git for Windows with `git-svn`, Subversion CLI, and GitHub CLI are required
+  for migrations.
+- Optional history cleaning uses the separately installed `git-filter-repo`.
+- A real SVN/GitHub migration remains an acceptance test.
+- Jobs are sequential; safe cancellation and restart resume are not available.
+- This is a local single-user pilot, not a production multi-user service.

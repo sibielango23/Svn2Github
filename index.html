@@ -671,12 +671,12 @@ code {
           <div class="arch-label">User Interface</div>
           <div class="arch-nodes">
             <div class="arch-node">
-              <div class="arch-node-title">Quick Start</div>
-              <div class="arch-node-desc">One-command CLI</div>
+              <div class="arch-node-title">WPF Launcher</div>
+              <div class="arch-node-desc">Local desktop app</div>
             </div>
             <div class="arch-node">
               <div class="arch-node-title">REST API</div>
-              <div class="arch-node-desc">Port 8000</div>
+              <div class="arch-node-desc">Loopback port 5000</div>
             </div>
             <div class="arch-node">
               <div class="arch-node-title">WPF Desktop</div>
@@ -740,7 +740,7 @@ code {
       </div>
     </div>
 
-    <p style="margin-top: var(--gap-l);">Each agent is a self-contained Python module that communicates via JSON through stdin/stdout. The orchestrator coordinates the workflow, passing configuration to agents and collecting results. This design allows agents to run in parallel where possible and makes the system easily extensible with custom agents.</p>
+    <p style="margin-top: var(--gap-l);">The WPF client communicates with an ASP.NET Core API. The API coordinates six C# workflow services that use Subversion, Git, and GitHub command-line tools. Migration jobs run sequentially and update local SQLite-backed progress.</p>
   </section>
 
   <!-- Agents -->
@@ -896,50 +896,20 @@ code {
       <h2>How to Use</h2>
     </div>
 
-    <h3 style="margin-top: var(--gap-l);">Option 1: Quick Start (Easiest)</h3>
+    <h3 style="margin-top: var(--gap-l);">Launch the WPF Application</h3>
     <div class="code-block">
-      <div class="code-header">Linux / macOS</div>
+      <div class="code-header">Windows PowerShell (from the repository root)</div>
       <div class="code-content">
-        <div class="code-line">./quickstart.sh https://svn.example.com/repo my-org my-repo</div>
+        <div class="code-line">.\start.ps1</div>
       </div>
     </div>
 
-    <div class="code-block">
-      <div class="code-header">Windows PowerShell</div>
-      <div class="code-content">
-        <div class="code-line">.\quickstart.ps1 https://svn.example.com/repo my-org my-repo</div>
-      </div>
-    </div>
-
-    <h3 style="margin-top: var(--gap-xl);">Option 2: REST API Server</h3>
+    <h3 style="margin-top: var(--gap-xl);">Run the API only</h3>
     <div class="code-block">
       <div class="code-header">Start API Server</div>
       <div class="code-content">
-        <div class="code-line">python api/main.py</div>
-        <div class="code-line"># Server runs on http://localhost:8000</div>
-      </div>
-    </div>
-
-    <div class="code-block">
-      <div class="code-header">Create Migration (curl)</div>
-      <div class="code-content">
-        <div class="code-line">curl -X POST http://localhost:8000/api/migrations \</div>
-        <div class="code-line">  -H "Content-Type: application/json" \</div>
-        <div class="code-line">  -d '{</div>
-        <div class="code-line">    "svn_url": "https://svn.example.com/repo",</div>
-        <div class="code-line">    "github_org": "my-org",</div>
-        <div class="code-line">    "github_repo": "my-repo",</div>
-        <div class="code-line">    "github_token": "ghp_xxxxx"</div>
-        <div class="code-line">  }'</div>
-      </div>
-    </div>
-
-    <h3 style="margin-top: var(--gap-xl);">Option 3: WPF Desktop Application</h3>
-    <div class="code-block">
-      <div class="code-header">Windows Only</div>
-      <div class="code-content">
-        <div class="code-line">.\start.ps1</div>
-        <div class="code-line"># Launches both API server and WPF UI</div>
+        <div class="code-line">.\start-api.ps1</div>
+        <div class="code-line"># Health: http://127.0.0.1:5000/api/health</div>
       </div>
     </div>
 
@@ -968,7 +938,7 @@ code {
           <svg viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg>
         </div>
         <div class="feature-text">
-          <strong>Python 3.8+</strong> — For running agents and API server
+          <strong>.NET 8 SDK</strong> — Builds the WPF app and ASP.NET Core API
         </div>
       </div>
       <div class="feature-item">
@@ -989,58 +959,36 @@ code {
       </div>
     </div>
 
-    <h3 style="margin-top: var(--gap-xl);">Agent Communication Protocol</h3>
-    <p>Agents are self-contained Python modules that communicate via JSON:</p>
+    <h3 style="margin-top: var(--gap-xl);">API Communication</h3>
+    <p>The WPF app calls the loopback API using camelCase JSON. The service validates requests, persists migration status without tokens, and queues migration work.</p>
 
     <div class="code-block">
-      <div class="code-header">Input (stdin)</div>
+      <div class="code-header">Migration request (illustrative)</div>
       <div class="code-content">
         <div class="code-line">{</div>
-        <div class="code-line">  "svn": {</div>
-        <div class="code-line">    "url": "https://svn.example.com/repo",</div>
-        <div class="code-line">    "trunk_path": "trunk",</div>
-        <div class="code-line">    "branches_path": "branches",</div>
-        <div class="code-line">    "tags_path": "tags"</div>
-        <div class="code-line">  },</div>
-        <div class="code-line">  "workspace": "/path/to/workspace"</div>
+        <div class="code-line">  "svnUrl": "https://svn.example.com/repo",</div>
+        <div class="code-line">  "githubOrg": "example-org",</div>
+        <div class="code-line">  "githubRepo": "migration-test",</div>
+        <div class="code-line">  "githubToken": "[provided in memory]",</div>
+        <div class="code-line">  "cleanHistory": false</div>
         <div class="code-line">}</div>
       </div>
     </div>
 
     <div class="code-block">
-      <div class="code-header">Output (stdout)</div>
+      <div class="code-header">API response</div>
       <div class="code-content">
         <div class="code-line">{</div>
         <div class="code-line">  "success": true,</div>
-        <div class="code-line">  "total_revisions": 15234,</div>
-        <div class="code-line">  "branches": 12,</div>
-        <div class="code-line">  "tags": 45,</div>
-        <div class="code-line">  "estimated_time_hours": 18</div>
+        <div class="code-line">  "id": "...",</div>
+        <div class="code-line">  "status": "pending",</div>
+        <div class="code-line">  "message": "Migration job created successfully"</div>
         <div class="code-line">}</div>
       </div>
     </div>
 
-    <h3 style="margin-top: var(--gap-xl);">Extending with Custom Agents</h3>
-    <p>The system is designed to be extensible. You can add custom agents for additional processing steps:</p>
-
-    <div class="code-block">
-      <div class="code-header">agents/custom_agent.py</div>
-      <div class="code-content">
-        <div class="code-line">#!/usr/bin/env python3</div>
-        <div class="code-line">import json, sys</div>
-        <div class="code-line"></div>
-        <div class="code-line">class CustomAgent:</div>
-        <div class="code-line">    def __init__(self, config):</div>
-        <div class="code-line">        self.config = config</div>
-        <div class="code-line"></div>
-        <div class="code-line">    def execute(self):</div>
-        <div class="code-line">        # Your logic here</div>
-        <div class="code-line">        return {'success': True}</div>
-        <div class="code-line"></div>
-        <div class="code-line">config = json.load(sys.stdin)</div>
-        <div class="code-line">print(json.dumps(CustomAgent(config).execute()))</div>
-      </div>
-    </div>
+    <h3 style="margin-top: var(--gap-xl);">Extending the workflow</h3>
+    <p>Workflow services are implemented in C# in the ASP.NET Core backend. New steps should follow the existing dependency-injection and cancellation-token patterns, preserve token redaction, and be validated against disposable repositories.</p>
   </section>
 
   <!-- CTA -->
@@ -1048,7 +996,7 @@ code {
     <h2>Ready to Migrate?</h2>
     <p>Get started with the SVN to GitHub migration system in under 5 minutes</p>
     <div class="cta-buttons">
-      <a href="docs/QUICKSTART.md" class="btn btn-primary">
+      <a href="GETTING_STARTED.md" class="btn btn-primary">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
         </svg>

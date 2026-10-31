@@ -23,6 +23,7 @@ namespace SVN2GitHub.Models
         public string TrunkPath { get; set; } = "trunk";
         public string BranchesPath { get; set; } = "branches";
         public string TagsPath { get; set; } = "tags";
+        public List<AuthorCreateRequest> Authors { get; set; } = new();
     }
 
     public class MigrationResponse

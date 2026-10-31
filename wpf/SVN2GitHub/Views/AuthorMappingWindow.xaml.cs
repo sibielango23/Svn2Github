@@ -17,6 +17,8 @@ namespace SVN2GitHub.Views
         private ObservableCollection<Author> _filteredAuthors = new();
         private bool _hasChanges = false;
 
+        public IReadOnlyList<Author> AllAuthors => _allAuthors;
+
         public ObservableCollection<Author> Authors
         {
             get => _filteredAuthors;
@@ -276,6 +278,7 @@ namespace SVN2GitHub.Views
             }
             else
             {
+                DialogResult = true;
                 Close();
             }
         }
