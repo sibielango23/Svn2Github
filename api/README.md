@@ -51,6 +51,10 @@ Creation requires `svnUrl` (HTTP/HTTPS/SVN, no embedded credentials),
 `trunkPath`, `branchesPath`, `tagsPath`, `cleanHistory`, and `authors`.
 The wizard supplies the reviewed authors in the request. Invalid input
 returns 422; accepted creation returns 200 with ID/status/timestamp.
+Migration creation, assessment and author sessions normalize valid URLs to
+escaped absolute URLs (`Source Code` becomes `Source%20Code`) without
+double-encoding existing escapes. Backslashes, UNC/filesystem inputs,
+credentials, query strings and fragments are rejected with HTTP 422.
 
 ## Local readiness contract
 

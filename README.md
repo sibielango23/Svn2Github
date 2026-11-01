@@ -18,6 +18,8 @@ migrating production history.
 - .NET 8 API and sequential background migration pipeline.
 - SVN analysis, author mapping, `git-svn` import, optional history cleaning,
   GitHub repository setup, push, and ref verification.
+  SVN server URLs support spaces in path names (normalized to `%20`).
+  Use `https://server/Source Code/`, not `server\Source Code\`.
   Accessible existing GitHub repositories are reused without changing settings;
   otherwise setup attempts private repository creation. Use an empty test
   destination: existing divergent history is not force-overwritten.

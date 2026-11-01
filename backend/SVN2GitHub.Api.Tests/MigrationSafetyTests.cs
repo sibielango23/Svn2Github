@@ -124,7 +124,8 @@ public sealed class MigrationSafetyTests
             throw new InvalidOperationException("test command should fail explicitly");
         });
         using var queue = fixture.Queue(runner);
-        var id = fixture.Store.Create(new MigrationRequest { GithubToken = "test-token" }).Id;
+        var id = fixture.Store.Create(new MigrationRequest
+            { SvnUrl = "https://svn.example.test/repo", GithubToken = "test-token" }).Id;
         Assert.True(queue.Enqueue(id));
         Assert.True(queue.TryCancel(id, out _));
         Assert.Equal("failed", fixture.Store.GetDetail(id)!.Status);
@@ -161,7 +162,8 @@ public sealed class MigrationSafetyTests
             }
         });
         using var queue = fixture.Queue(runner);
-        var id = fixture.Store.Create(new MigrationRequest { GithubToken = "test-token" }).Id;
+        var id = fixture.Store.Create(new MigrationRequest
+            { SvnUrl = "https://svn.example.test/repo", GithubToken = "test-token" }).Id;
         fixture.Store.CompleteStage(id, MigrationStages.Analysis, "analyzing", "Analysis saved", 20, "test");
         Assert.True(queue.Enqueue(id));
         await queue.StartAsync(CancellationToken.None);
@@ -177,7 +179,8 @@ public sealed class MigrationSafetyTests
         Assert.NotNull(fixture.Store.GetDetail(id)!.ElapsedSeconds);
         Assert.Null(fixture.Store.GetDetail(id)!.RunningSince);
         Assert.False(queue.TryCancel(id, out _));
-        var second = fixture.Store.Create(new MigrationRequest { GithubToken = "second-token" }).Id;
+        var second = fixture.Store.Create(new MigrationRequest
+            { SvnUrl = "https://svn.example.test/repo", GithubToken = "second-token" }).Id;
         Assert.True(queue.Enqueue(second));
         await WaitForAsync(() => fixture.Store.GetDetail(second)!.RunningSince is not null);
         Assert.True(queue.TryCancel(second, out _));

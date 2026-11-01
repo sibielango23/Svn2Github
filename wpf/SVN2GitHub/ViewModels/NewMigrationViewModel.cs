@@ -5,6 +5,7 @@ using SVN2GitHub.Services;
 using System.Text.RegularExpressions;
 using System.Windows;
 using SVN2GitHub.Views;
+using SVN2GitHub.Shared;
 
 namespace SVN2GitHub.ViewModels
 {
@@ -231,7 +232,7 @@ namespace SVN2GitHub.ViewModels
                 GitEmail = author.GitEmail,
                 Verified = author.Verified
             }).ToList();
-            PreparedAuthorsSvnUrl = svnUrl;
+            PreparedAuthorsSvnUrl = SvnUrlNormalizer.Normalize(svnUrl);
             NotifyAuthorMappingChanged();
         }
 
@@ -241,13 +242,8 @@ namespace SVN2GitHub.ViewModels
 
         private bool ValidateSource()
         {
-            if (!Uri.TryCreate(SvnUrl.Trim(), UriKind.Absolute, out var uri) ||
-                uri.Host.Length == 0 ||
-                uri.UserInfo.Length > 0 ||
-                uri.Scheme is not ("http" or "https" or "svn"))
+            if (!NormalizeSourceUrl())
             {
-                ValidationMessage =
-                    "Enter a valid SVN URL using https://, http://, or svn://. Do not put credentials in the URL.";
                 return false;
             }
 
@@ -288,6 +284,18 @@ namespace SVN2GitHub.ViewModels
                 return false;
             }
 
+            return true;
+        }
+
+        public bool NormalizeSourceUrl()
+        {
+            if (!SvnUrlNormalizer.TryNormalize(SvnUrl, out var normalized))
+            {
+                ValidationMessage = SvnUrlNormalizer.ValidationMessage;
+                return false;
+            }
+
+            SvnUrl = normalized;
             return true;
         }
 

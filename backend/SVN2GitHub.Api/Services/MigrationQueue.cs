@@ -4,6 +4,7 @@ using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using SVN2GitHub.Api.Models;
+using SVN2GitHub.Shared;
 
 namespace SVN2GitHub.Api.Services;
 
@@ -260,7 +261,7 @@ public sealed class MigrationQueue : BackgroundService
         var checkpoint = record.Detail.LastCompletedStage;
         var request = new MigrationRequest
         {
-            SvnUrl = record.Detail.SvnUrl,
+            SvnUrl = SvnUrlNormalizer.Normalize(record.Detail.SvnUrl),
             GithubOrg = record.Detail.GithubOrg,
             GithubRepo = record.Detail.GithubRepo,
             GithubToken = record.GithubToken,

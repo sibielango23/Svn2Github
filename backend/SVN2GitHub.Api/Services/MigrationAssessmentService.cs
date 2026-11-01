@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Xml;
 using System.Xml.Linq;
 using SVN2GitHub.Api.Models;
+using SVN2GitHub.Shared;
 
 namespace SVN2GitHub.Api.Services;
 
@@ -13,7 +14,7 @@ public sealed class MigrationAssessmentService(
     public async Task<ReadinessReport> AssessAsync(MigrationRequest request, CancellationToken cancellationToken)
     {
         var report = await readiness.CheckAsync(request.CleanHistory, cancellationToken);
-        var baseUrl = request.SvnUrl.TrimEnd('/');
+        var baseUrl = SvnUrlNormalizer.Normalize(request.SvnUrl).TrimEnd('/');
         foreach (var (name, path) in new[]
                  { ("Trunk access", request.TrunkPath), ("Branches access", request.BranchesPath), ("Tags access", request.TagsPath) })
         {
@@ -24,7 +25,7 @@ public sealed class MigrationAssessmentService(
                 continue;
             }
 
-            var result = await RunAsync("svn", ["info", "--non-interactive", $"{baseUrl}/{path}"],
+            var result = await RunAsync("svn", ["info", "--non-interactive", SvnUrlNormalizer.AppendPath(baseUrl, path)],
                 request, cancellationToken);
             report.Checks.Add(new ReadinessCheck(name, result?.ExitCode == 0 ? "passed" : "failed",
                 result?.ExitCode == 0 ? $"Readable: {path}" : "SVN path could not be read. Check layout and cached SVN credentials."));
@@ -68,7 +69,7 @@ public sealed class MigrationAssessmentService(
         if (IsRelativeLayoutPath(request.TrunkPath))
         {
             var files = await RunAsync("svn",
-                ["list", "--xml", "--recursive", "--non-interactive", $"{baseUrl}/{request.TrunkPath}"],
+                ["list", "--xml", "--recursive", "--non-interactive", SvnUrlNormalizer.AppendPath(baseUrl, request.TrunkPath)],
                 request, cancellationToken);
             try
             {

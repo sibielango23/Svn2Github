@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.RegularExpressions;
 using SVN2GitHub.Api.Models;
+using SVN2GitHub.Shared;
 
 namespace SVN2GitHub.Api.Services;
 
@@ -15,7 +16,7 @@ public sealed class RepositoryAnalyzer(IExternalCommandRunner commands)
         CancellationToken cancellationToken)
     {
         Directory.CreateDirectory(workspace);
-        var baseUrl = svnUrl.TrimEnd('/');
+        var baseUrl = SvnUrlNormalizer.Normalize(svnUrl).TrimEnd('/');
         var rootResult = await commands.RunAsync(
             "svn", ["list", baseUrl], timeout: TimeSpan.FromMinutes(2),
             cancellationToken: cancellationToken);
@@ -34,8 +35,8 @@ public sealed class RepositoryAnalyzer(IExternalCommandRunner commands)
                 ? "standard"
                 : "non-standard";
 
-        var branchList = await ListDirectoryAsync($"{baseUrl}/{branches}", cancellationToken);
-        var tagList = await ListDirectoryAsync($"{baseUrl}/{tags}", cancellationToken);
+        var branchList = await ListDirectoryAsync(SvnUrlNormalizer.AppendPath(baseUrl, branches), cancellationToken);
+        var tagList = await ListDirectoryAsync(SvnUrlNormalizer.AppendPath(baseUrl, tags), cancellationToken);
         var revisionResult = await commands.RunAsync(
             "svn", ["log", "--quiet", "--limit", "1", baseUrl],
             timeout: TimeSpan.FromMinutes(2), cancellationToken: cancellationToken);
@@ -46,7 +47,7 @@ public sealed class RepositoryAnalyzer(IExternalCommandRunner commands)
 
         object sizeEstimate = new { trunk_files = (int?)null, estimated_complexity = "unknown" };
         var sizeResult = await commands.RunAsync(
-            "svn", ["list", "-R", $"{baseUrl}/{trunk}"],
+            "svn", ["list", "-R", SvnUrlNormalizer.AppendPath(baseUrl, trunk)],
             timeout: TimeSpan.FromSeconds(30), cancellationToken: cancellationToken);
         if (sizeResult.ExitCode == 0)
         {
@@ -118,7 +119,7 @@ public sealed class AuthorMapper(IExternalCommandRunner commands)
         CancellationToken cancellationToken)
     {
         var result = await commands.RunCheckedAsync(
-            "svn", ["log", "--quiet", svnUrl],
+            "svn", ["log", "--quiet", SvnUrlNormalizer.Normalize(svnUrl)],
             timeout: TimeSpan.FromMinutes(10), cancellationToken: cancellationToken);
         var authors = RepositoryAnalyzer.ExtractUsernames(result.StandardOutput)
             .Distinct(StringComparer.Ordinal)
@@ -151,7 +152,7 @@ public sealed class MigrationExecutor(IExternalCommandRunner commands)
     {
         var started = DateTime.UtcNow;
         var repoPath = Path.Combine(workspace, "migrated-repo");
-        var arguments = new List<string> { "svn", "clone" };
+        var arguments = new List<string> { "svn", "clone", "--no-minimize-url" };
         var standard = migration.TrunkPath == "trunk" &&
                        migration.BranchesPath == "branches" &&
                        migration.TagsPath == "tags";
@@ -171,7 +172,7 @@ public sealed class MigrationExecutor(IExternalCommandRunner commands)
         }
 
         arguments.Add("--no-metadata");
-        arguments.Add(migration.SvnUrl);
+        arguments.Add(SvnUrlNormalizer.Normalize(migration.SvnUrl));
         arguments.Add(repoPath);
 
         var clone = await commands.RunAsync(

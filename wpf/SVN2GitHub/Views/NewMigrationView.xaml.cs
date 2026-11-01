@@ -33,10 +33,10 @@ namespace SVN2GitHub.Views
         {
             if (DataContext is NewMigrationViewModel viewModel)
             {
-                if (string.IsNullOrWhiteSpace(viewModel.SvnUrl))
+                if (!viewModel.NormalizeSourceUrl())
                 {
                     MessageBox.Show(
-                        "Please enter an SVN repository URL first.",
+                        viewModel.ValidationMessage,
                         "SVN URL Required",
                         MessageBoxButton.OK,
                         MessageBoxImage.Information);

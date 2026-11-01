@@ -1,5 +1,50 @@
 # Validation Results
 
+## git-svn URL minimization fix validation
+
+- Build passed with zero warnings/errors; **65 tests passed** (42 API,
+  23 desktop):
+
+  ```powershell
+  dotnet build wpf\SVN2GitHub.sln --configuration Debug -m:1 -p:UseAppHost=false -p:OutputPath=D:\Svn2Github\temp\git-svn-fix-validation\
+  dotnet test wpf\SVN2GitHub.sln --configuration Debug --no-build -m:1 -p:UseAppHost=false -p:OutputPath=D:\Svn2Github\temp\git-svn-fix-validation\
+  ```
+
+- Actual git-svn clone against a disposable loopback SVN server passed:
+
+  ```powershell
+  git svn clone --no-minimize-url --stdlayout --authors-file D:\Svn2Github\temp\git-svn-space-repro\authors.txt --no-metadata svn://127.0.0.1:3692/Source%20Code D:\Svn2Github\temp\git-svn-space-repro\fixed-import
+  ```
+
+  Six revisions were imported with trunk, feature-demo and v1.0 remote refs.
+  Stored SVN URL remained `%20` (not `%2520`), fetch mappings were valid,
+  imported settings content matched trunk/branch/tag expectations, and
+  `git fsck --full` passed.
+- Tests assert `--no-minimize-url` for standard and custom layouts while
+  preserving encoded URLs. No company SVN server or GitHub push was accessed.
+  This verifies a local git-svn import, not full enterprise acceptance.
+- The previously uploaded URL-spaces DLL patch predates this additional fix.
+
+## SVN URL spaces validation
+
+- Build passed with zero warnings/errors; **63 tests passed** (40 API,
+  23 desktop), using:
+
+  ```powershell
+  dotnet build wpf\SVN2GitHub.sln --configuration Debug -m:1 -p:UseAppHost=false -p:OutputPath=D:\Svn2Github\temp\svn-url-validation\
+  dotnet test wpf\SVN2GitHub.sln --configuration Debug --no-build -m:1 -p:UseAppHost=false -p:OutputPath=D:\Svn2Github\temp\svn-url-validation\
+  ```
+
+- Tests cover raw/encoded spaces, idempotence (no `%2520` double encoding),
+  escaped path separators, unsupported filesystem/backslash inputs,
+  credentials, query/fragment rejection, command argument shape, and WPF
+  navigation/author-mapping association.
+- Real disposable SVN server checks on loopback port 3691 passed for
+  `svn://127.0.0.1:3691/Source%20Code`: info, full visible log, and trunk list.
+  Temporary server/state were cleaned; existing sample/user data preserved.
+- No GitHub operation or full git-svn migration was performed. The published
+  `portable-f7dd04b` ZIP predates this change.
+
 ## Existing GitHub destination validation
 
 - Solution build passed with zero warnings/errors; 48 tests passed (27 API,

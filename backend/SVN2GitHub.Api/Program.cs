@@ -1,6 +1,7 @@
 using System.Text.RegularExpressions;
 using SVN2GitHub.Api.Models;
 using SVN2GitHub.Api.Services;
+using SVN2GitHub.Shared;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.WebHost.UseUrls(
@@ -181,15 +182,15 @@ app.MapPost("/api/authors/{migrationId}/session", (string migrationId, AuthorSes
         });
     }
 
-    if (!IsValidSvnUrl(request.SvnUrl))
+    if (!SvnUrlNormalizer.TryNormalize(request.SvnUrl, out var normalizedUrl))
     {
         return Results.UnprocessableEntity(new ApiError
         {
-            Detail = "SVN URL must use https://, http://, or svn://"
+            Detail = SvnUrlNormalizer.ValidationMessage
         });
     }
 
-    stateStore.OpenAuthorSession(migrationId, request.SvnUrl);
+    stateStore.OpenAuthorSession(migrationId, normalizedUrl);
     return Results.Ok(new { id = migrationId });
 });
 
@@ -213,7 +214,7 @@ app.MapPost("/api/authors/{migrationId}/extract", async (
     try
     {
         var result = await commands.RunCheckedAsync(
-            "svn", ["log", "--quiet", "--limit", "5000", svnUrl],
+            "svn", ["log", "--quiet", "--limit", "5000", SvnUrlNormalizer.Normalize(svnUrl)],
             timeout: TimeSpan.FromMinutes(5), cancellationToken: cancellationToken);
         var usernames = RepositoryAnalyzer.ExtractUsernames(result.StandardOutput);
         return Results.Ok(store.MergeExtractedAuthors(migrationId, usernames));
@@ -361,10 +362,11 @@ static string? ValidateMigration(MigrationRequest request)
         return "The authors list is required";
     }
 
-    if (!IsValidSvnUrl(request.SvnUrl))
+    if (!SvnUrlNormalizer.TryNormalize(request.SvnUrl, out var normalizedUrl))
     {
-        return "SVN URL must use https://, http://, or svn://";
+        return SvnUrlNormalizer.ValidationMessage;
     }
+    request.SvnUrl = normalizedUrl;
 
     if (string.IsNullOrWhiteSpace(request.GithubOrg) ||
         !Regex.IsMatch(request.GithubOrg,
@@ -404,12 +406,6 @@ static string? ValidateMigration(MigrationRequest request)
 
     return null;
 }
-
-static bool IsValidSvnUrl(string value) =>
-    Uri.TryCreate(value, UriKind.Absolute, out var uri) &&
-    uri.Host.Length > 0 &&
-    uri.UserInfo.Length == 0 &&
-    uri.Scheme is "http" or "https" or "svn";
 
 static bool ValidateSingleAuthor(
     AuthorInput request,

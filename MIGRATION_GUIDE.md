@@ -115,6 +115,24 @@ verification attempt and reset when Resume starts a new attempt.
 
 ## Troubleshooting
 
+### Spaces in SVN URLs
+
+Use a full server URL with forward slashes, for example
+`https://svn.example.com/Source Code/` or
+`svn://server/Source Code/`. The app encodes spaces as `%20` before passing
+the URL to SVN/git-svn; already encoded paths are not double-encoded.
+Relative trunk/branch/tag paths can also contain spaces.
+Imports use `git svn clone --no-minimize-url` to keep the configured SVN
+base URL. This avoids git-svn rewriting spaced URLs into double-escaped
+`%2520` paths and malformed fetch mappings. The selected URL must still
+contain the configured trunk/branches/tags layout; URL encoding does not
+correct an inappropriate source layout.
+`svn.com\Source Code\` is not a server URL: include the correct protocol and
+use `/`, not `\`. UNC/filesystem paths and URLs containing credentials,
+queries or fragments are rejected explicitly.
+This normalization is in current source; the `portable-f7dd04b` release
+predates it and must be republished to include the fix.
+
 ### Disposable local SVN sample
 
 If you have no SVN source, create a test fixture with the bundled SVN tools:

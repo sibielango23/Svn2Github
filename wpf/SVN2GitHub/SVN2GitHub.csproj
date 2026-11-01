@@ -11,6 +11,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Include="..\..\shared\SvnUrlNormalizer.cs" Link="Shared\SvnUrlNormalizer.cs" />
     <!-- Material Design -->
     <PackageReference Include="MaterialDesignThemes" Version="5.0.0" />
     <PackageReference Include="MaterialDesignColors" Version="3.0.0" />
