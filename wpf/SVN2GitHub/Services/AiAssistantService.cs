@@ -10,10 +10,16 @@ namespace SVN2GitHub.Services
 {
     public sealed class AiAssistantService
     {
-        private static readonly HttpClient HttpClient = new()
+        private static readonly HttpClient DefaultHttpClient = new()
         {
             Timeout = TimeSpan.FromSeconds(90)
         };
+        private readonly HttpClient _httpClient;
+
+        public AiAssistantService(HttpClient? httpClient = null)
+        {
+            _httpClient = httpClient ?? DefaultHttpClient;
+        }
 
         private static readonly Regex SecretPattern = new(
             @"(?<Token>\b(?:gh[pousr]_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]{20,})\b)|" +
@@ -64,7 +70,7 @@ namespace SVN2GitHub.Services
                 _ => throw new InvalidOperationException("The selected AI provider is not supported.")
             };
 
-            using var response = await HttpClient.SendAsync(request, cancellationToken);
+            using var response = await _httpClient.SendAsync(request, cancellationToken);
             var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
             if (!response.IsSuccessStatusCode)
             {
@@ -111,8 +117,7 @@ namespace SVN2GitHub.Services
                 Content = JsonContent.Create(new
                 {
                     model = settings.Model,
-                    messages,
-                    temperature = 0.2
+                    messages
                 })
             };
             request.Headers.Authorization =
@@ -156,8 +161,10 @@ namespace SVN2GitHub.Services
                 throw new InvalidDataException("The OpenAI response did not contain a message.");
             }
 
-            return content.GetString()
-                ?? throw new InvalidDataException("The OpenAI response message was empty.");
+            var text = content.GetString();
+            return !string.IsNullOrWhiteSpace(text)
+                ? text
+                : throw new InvalidDataException("The OpenAI response message was empty.");
         }
 
         private static string ReadAnthropicResponse(JsonElement root)

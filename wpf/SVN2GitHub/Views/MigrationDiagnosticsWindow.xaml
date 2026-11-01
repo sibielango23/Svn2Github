@@ -1,0 +1,47 @@
+<Window x:Class="SVN2GitHub.Views.MigrationDiagnosticsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
+        Title="Migration diagnostics" Width="900" Height="720" MinWidth="520" MinHeight="480"
+        WindowStartupLocation="CenterOwner">
+    <Grid Margin="24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+        <TextBlock Text="Migration diagnostics" FontSize="24" FontWeight="SemiBold" Margin="0,0,0,12"/>
+        <TabControl Grid.Row="1">
+            <TabItem Header="Overview and recovery">
+                <TextBox Text="{Binding Summary, Mode=OneWay}" IsReadOnly="True" TextWrapping="Wrap"
+                         VerticalScrollBarVisibility="Auto" FontFamily="Consolas" FontSize="13" Margin="8"/>
+            </TabItem>
+            <TabItem Header="Recorded logs">
+                <Grid Margin="8">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+                    <TextBox Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
+                             materialDesign:HintAssist.Hint="Filter recorded logs" Margin="0,0,0,12"/>
+                    <TextBox Grid.Row="1" Text="{Binding FilteredLogs, Mode=OneWay}" IsReadOnly="True"
+                             TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" FontFamily="Consolas" FontSize="12"/>
+                </Grid>
+            </TabItem>
+            <TabItem Header="Verification">
+                <TextBox Text="{Binding VerificationSummary, Mode=OneWay}" IsReadOnly="True"
+                         TextWrapping="Wrap" VerticalScrollBarVisibility="Auto"
+                         FontFamily="Consolas" FontSize="12" Margin="8"/>
+            </TabItem>
+        </TabControl>
+        <TextBlock Grid.Row="2" Text="{Binding StatusMessage}" TextWrapping="Wrap" FontSize="12" Margin="0,12"/>
+        <WrapPanel Grid.Row="3" HorizontalAlignment="Right">
+            <Button Content="Copy support report" Command="{Binding CopyReportCommand}" Height="40" Margin="0,0,8,0"
+                    Style="{StaticResource MaterialDesignOutlinedButton}"/>
+            <Button Content="Export report" Command="{Binding ExportReportCommand}" Height="40" Margin="0,0,8,0"
+                    Style="{StaticResource MaterialDesignRaisedButton}"/>
+            <Button Content="Close" IsCancel="True" Height="40" Style="{StaticResource MaterialDesignFlatButton}"/>
+        </WrapPanel>
+    </Grid>
+</Window>

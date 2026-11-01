@@ -4,7 +4,43 @@ namespace SVN2GitHub.Api.Services;
 
 public sealed record CommandResult(int ExitCode, string StandardOutput, string StandardError);
 
-public sealed class ExternalCommandRunner
+public interface IExternalCommandRunner
+{
+    Task<CommandResult> RunAsync(
+        string executable,
+        IEnumerable<string> arguments,
+        string? workingDirectory = null,
+        TimeSpan? timeout = null,
+        IReadOnlyDictionary<string, string?>? environment = null,
+        CancellationToken cancellationToken = default);
+}
+
+public static class ExternalCommandRunnerExtensions
+{
+    public static async Task<CommandResult> RunCheckedAsync(
+        this IExternalCommandRunner commands,
+        string executable,
+        IEnumerable<string> arguments,
+        string? workingDirectory = null,
+        TimeSpan? timeout = null,
+        IReadOnlyDictionary<string, string?>? environment = null,
+        CancellationToken cancellationToken = default)
+    {
+        var result = await commands.RunAsync(executable, arguments, workingDirectory, timeout,
+            environment, cancellationToken);
+        if (result.ExitCode != 0)
+        {
+            var detail = string.IsNullOrWhiteSpace(result.StandardError)
+                ? result.StandardOutput : result.StandardError;
+            throw new InvalidOperationException(
+                $"Command '{executable}' failed with exit code {result.ExitCode}: {detail.Trim()}");
+        }
+
+        return result;
+    }
+}
+
+public sealed class ExternalCommandRunner : IExternalCommandRunner
 {
     public async Task<CommandResult> RunAsync(
         string executable,
@@ -14,6 +50,7 @@ public sealed class ExternalCommandRunner
         IReadOnlyDictionary<string, string?>? environment = null,
         CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         var startInfo = new ProcessStartInfo
         {
             FileName = executable,
@@ -98,30 +135,13 @@ public sealed class ExternalCommandRunner
             await stderrTask);
     }
 
-    public async Task<CommandResult> RunCheckedAsync(
+    public Task<CommandResult> RunCheckedAsync(
         string executable,
         IEnumerable<string> arguments,
         string? workingDirectory = null,
         TimeSpan? timeout = null,
         IReadOnlyDictionary<string, string?>? environment = null,
         CancellationToken cancellationToken = default)
-    {
-        var result = await RunAsync(
-            executable,
-            arguments,
-            workingDirectory,
-            timeout,
-            environment,
-            cancellationToken);
-        if (result.ExitCode != 0)
-        {
-            var detail = string.IsNullOrWhiteSpace(result.StandardError)
-                ? result.StandardOutput
-                : result.StandardError;
-            throw new InvalidOperationException(
-                $"Command '{executable}' failed with exit code {result.ExitCode}: {detail.Trim()}");
-        }
-
-        return result;
-    }
+        => ExternalCommandRunnerExtensions.RunCheckedAsync(this, executable, arguments,
+            workingDirectory, timeout, environment, cancellationToken);
 }

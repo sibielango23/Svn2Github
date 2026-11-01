@@ -14,8 +14,12 @@ A clear and concise description of what the bug is.
 
 - **OS:** [e.g., Windows 11]
 - **.NET Version:** [e.g., 8.0]
-- **Python Version:** [e.g., 3.11]
-- **Component:** [e.g., WPF App, API, Agent]
+- **Deployment:** [source / portable folder or ZIP]
+- **App commit/package date:** [identify the actual binaries; older ZIPs may lack recent changes]
+- **Tool versions:** [Git/git-svn, SVN, gh; optional git-filter-repo]
+- **Component:** [e.g., dashboard, migration wizard, AI chat, .NET API]
+- **Migration status/checkpoint:** [if relevant; do not include credentials]
+- **AI provider/model:** [if relevant; never paste an API key]
 
 ## 🔄 Steps to Reproduce
 
@@ -41,6 +45,11 @@ If applicable, add screenshots to help explain your problem.
 ```
 Paste relevant log output here
 ```
+
+Redact tokens, passwords, sensitive repository URLs, and confidential code.
+For portable issues, include whether the full ZIP was extracted, bundled tools
+were used, and `SVN2GITHUB_PORTABLE_DATA_ROOT` was configured (redact private
+path details). Do not attach databases or encrypted credentials/chat files.
 
 ## 🔍 Additional Context
 

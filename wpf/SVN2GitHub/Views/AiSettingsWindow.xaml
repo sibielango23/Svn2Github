@@ -65,19 +65,27 @@
                        Foreground="IndianRed"/>
         </StackPanel>
 
-        <StackPanel Grid.Row="5"
-                    Orientation="Horizontal"
-                    HorizontalAlignment="Right"
-                    VerticalAlignment="Bottom"
-                    Margin="0,18,0,0">
-            <Button Content="CANCEL"
+        <Grid Grid.Row="5" Margin="0,18,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <Button x:Name="ClearKeyButton"
+                    Content="CLEAR SAVED KEY"
+                    Click="ClearKeyButton_Click"
+                    Style="{StaticResource MaterialDesignFlatButton}"
+                    HorizontalAlignment="Left"
+                    IsEnabled="False"/>
+            <StackPanel Grid.Column="1" Orientation="Horizontal">
+                <Button Content="CANCEL"
                     IsCancel="True"
                     Style="{StaticResource MaterialDesignFlatButton}"
                     Margin="0,0,8,0"/>
-            <Button Content="SAVE"
+                <Button Content="SAVE"
                     IsDefault="True"
                     Click="SaveButton_Click"
                     Style="{StaticResource MaterialDesignRaisedButton}"/>
-        </StackPanel>
+            </StackPanel>
+        </Grid>
     </Grid>
 </Window>

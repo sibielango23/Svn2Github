@@ -20,6 +20,15 @@ namespace SVN2GitHub.Views
             }
         }
 
+        private void ClearForm_Click(object sender, RoutedEventArgs e)
+        {
+            TokenPasswordBox.Clear();
+            if (DataContext is NewMigrationViewModel viewModel)
+            {
+                viewModel.ClearFormCommand.Execute(null);
+            }
+        }
+
         private async void ConfigureAuthors_Click(object sender, RoutedEventArgs e)
         {
             if (DataContext is NewMigrationViewModel viewModel)

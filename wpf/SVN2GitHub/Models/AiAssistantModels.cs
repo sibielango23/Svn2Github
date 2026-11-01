@@ -1,3 +1,5 @@
+using CommunityToolkit.Mvvm.ComponentModel;
+
 namespace SVN2GitHub.Models
 {
     public enum AiProvider
@@ -13,9 +15,12 @@ namespace SVN2GitHub.Models
         public string ApiKey { get; set; } = string.Empty;
     }
 
-    public sealed class AiChatMessage
+    public sealed partial class AiChatMessage : ObservableObject
     {
         public string Role { get; set; } = string.Empty;
         public string Content { get; set; } = string.Empty;
+
+        [ObservableProperty]
+        private bool _isFailed;
     }
 }

@@ -14,6 +14,8 @@ namespace SVN2GitHub.Views
         private AiProviderSettings? _existingSettings;
         private int _lastSelectedProviderIndex;
 
+        public bool SettingsChanged { get; private set; }
+
         public AiSettingsWindow()
         {
             InitializeComponent();
@@ -32,7 +34,11 @@ namespace SVN2GitHub.Views
 
                 ProviderBox.SelectedIndex = _existingSettings.Provider == AiProvider.OpenAI ? 0 : 1;
                 ModelBox.Text = _existingSettings.Model;
-                KeyStatusText.Text = "An API key is saved and protected for this Windows user.";
+                var hasSavedKey = !string.IsNullOrWhiteSpace(_existingSettings.ApiKey);
+                KeyStatusText.Text = hasSavedKey
+                    ? "An API key is saved and protected for this Windows user."
+                    : "No API key is saved. Provider and model settings are retained.";
+                ClearKeyButton.IsEnabled = hasSavedKey;
             }
             catch (Exception exception) when (
                 exception is IOException or
@@ -62,7 +68,9 @@ namespace SVN2GitHub.Views
                 if (_existingSettings?.Provider == provider)
                 {
                     ModelBox.Text = _existingSettings.Model;
-                    KeyStatusText.Text = "A protected API key for this provider will be kept unless replaced.";
+                    KeyStatusText.Text = string.IsNullOrWhiteSpace(_existingSettings.ApiKey)
+                        ? "No API key is saved. Provider and model settings are retained."
+                        : "A protected API key for this provider will be kept unless replaced.";
                 }
                 else
                 {
@@ -107,6 +115,7 @@ namespace SVN2GitHub.Views
             try
             {
                 _settingsStore.Save(settings);
+                SettingsChanged = true;
                 DialogResult = true;
             }
             catch (Exception exception) when (
@@ -117,6 +126,43 @@ namespace SVN2GitHub.Views
                 InvalidOperationException)
             {
                 StatusText.Text = $"Could not save AI settings: {exception.Message}";
+            }
+        }
+
+        private void ClearKeyButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (MessageBox.Show(
+                    this,
+                    "Remove the saved AI API key from this Windows user account? Provider and model settings will be kept.",
+                    "Clear saved AI key",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Warning) != MessageBoxResult.Yes)
+            {
+                return;
+            }
+
+            try
+            {
+                _settingsStore.ClearApiKey();
+                if (_existingSettings is not null)
+                {
+                    _existingSettings.ApiKey = string.Empty;
+                }
+
+                ApiKeyBox.Clear();
+                ClearKeyButton.IsEnabled = false;
+                KeyStatusText.Text = "No API key is saved. Provider and model settings are retained.";
+                StatusText.Text = "Saved AI API key cleared.";
+                SettingsChanged = true;
+            }
+            catch (Exception exception) when (
+                exception is IOException or
+                UnauthorizedAccessException or
+                CryptographicException or
+                JsonException or
+                FormatException)
+            {
+                StatusText.Text = $"Could not clear the saved AI key: {exception.Message}";
             }
         }
     }

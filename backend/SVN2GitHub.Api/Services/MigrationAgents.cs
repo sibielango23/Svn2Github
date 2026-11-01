@@ -4,7 +4,7 @@ using SVN2GitHub.Api.Models;
 
 namespace SVN2GitHub.Api.Services;
 
-public sealed class RepositoryAnalyzer(ExternalCommandRunner commands)
+public sealed class RepositoryAnalyzer(IExternalCommandRunner commands)
 {
     public async Task<Dictionary<string, object?>> AnalyzeAsync(
         string svnUrl,
@@ -109,7 +109,7 @@ public sealed class RepositoryAnalyzer(ExternalCommandRunner commands)
     }
 }
 
-public sealed class AuthorMapper(ExternalCommandRunner commands)
+public sealed class AuthorMapper(IExternalCommandRunner commands)
 {
     public async Task<(List<string> Authors, string File)> CreateMappingAsync(
         string svnUrl,
@@ -141,7 +141,7 @@ public sealed class AuthorMapper(ExternalCommandRunner commands)
         value.Length == 0 ? value : char.ToUpperInvariant(value[0]) + value[1..];
 }
 
-public sealed class MigrationExecutor(ExternalCommandRunner commands)
+public sealed class MigrationExecutor(IExternalCommandRunner commands)
 {
     public async Task<Dictionary<string, object?>> ExecuteAsync(
         MigrationRequest migration,
@@ -364,7 +364,7 @@ public sealed class MigrationExecutor(ExternalCommandRunner commands)
         value.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries).Length;
 }
 
-public sealed class HistoryCleaner(ExternalCommandRunner commands)
+public sealed class HistoryCleaner(IExternalCommandRunner commands)
 {
     public async Task<Dictionary<string, object?>> CleanAsync(
         string workspace,
@@ -431,7 +431,7 @@ public sealed class HistoryCleaner(ExternalCommandRunner commands)
     }
 }
 
-public sealed class GitHubSetup(ExternalCommandRunner commands)
+public sealed class GitHubSetup(IExternalCommandRunner commands)
 {
     public async Task<Dictionary<string, object?>> SetupAsync(
         string organization,
@@ -456,28 +456,36 @@ public sealed class GitHubSetup(ExternalCommandRunner commands)
             return Failure("Unable to configure Git authentication: " + setupGit.StandardError);
         }
 
+        var existing = await commands.RunAsync(
+            "gh", ["repo", "view", $"{organization}/{repository}", "--json", "nameWithOwner"],
+            environment: environment, cancellationToken: cancellationToken);
+        if (existing.ExitCode == 0)
+        {
+            return Destination(organization, repository);
+        }
+
+        if (!existing.StandardError.Contains("Could not resolve to a Repository", StringComparison.OrdinalIgnoreCase) &&
+            !existing.StandardError.Contains("HTTP 404", StringComparison.OrdinalIgnoreCase))
+        {
+            return Failure("Could not inspect the destination repository: " + existing.StandardError);
+        }
+
         var create = await commands.RunAsync(
             "gh",
             ["repo", "create", $"{organization}/{repository}", "--description", "Migrated from SVN", "--private"],
             environment: environment,
             cancellationToken: cancellationToken);
-        if (create.ExitCode != 0 &&
-            !create.StandardError.Contains("already exists", StringComparison.OrdinalIgnoreCase))
+        if (create.ExitCode != 0)
         {
-            return Failure(create.StandardError);
+            return Failure("Could not create the destination. If it already exists, verify the owner, repository name and token access: " +
+                create.StandardError);
         }
 
-        foreach (var arguments in new[]
-                 {
-                     new[] { "repo", "edit", $"{organization}/{repository}", "--enable-issues" },
-                     new[] { "repo", "edit", $"{organization}/{repository}", "--enable-wiki" },
-                     new[] { "repo", "edit", $"{organization}/{repository}", "--add-topic", "svn-migration" }
-                 })
-        {
-            _ = await commands.RunAsync(
-                "gh", arguments, environment: environment, cancellationToken: cancellationToken);
-        }
+        return Destination(organization, repository);
+    }
 
+    private static Dictionary<string, object?> Destination(string organization, string repository)
+    {
         var cloneUrl = $"https://github.com/{organization}/{repository}.git";
         return new Dictionary<string, object?>
         {
@@ -494,7 +502,7 @@ public sealed class GitHubSetup(ExternalCommandRunner commands)
         new() { ["success"] = false, ["error"] = error };
 }
 
-public sealed class PushVerifier(ExternalCommandRunner commands)
+public sealed class PushVerifier(IExternalCommandRunner commands)
 {
     public async Task<Dictionary<string, object?>> PushAndVerifyAsync(
         string workspace,
@@ -535,10 +543,42 @@ public sealed class PushVerifier(ExternalCommandRunner commands)
 
         var localBranches = await ReadLocalRefsAsync(repoPath, "refs/heads/", cancellationToken);
         var localTags = await ReadLocalRefsAsync(repoPath, "refs/tags/", cancellationToken);
-        var remoteBranches = await ReadRemoteRefsAsync(repoPath, "--heads", "refs/heads/", cancellationToken);
-        var remoteTags = await ReadRemoteRefsAsync(repoPath, "--tags", "refs/tags/", cancellationToken);
+        var remoteBranches = await ReadRemoteRefsAsync(repoPath, "--heads", "refs/heads/", environment, cancellationToken);
+        var remoteTags = await ReadRemoteRefsAsync(repoPath, "--tags", "refs/tags/", environment, cancellationToken);
         var branchVerification = CompareRefs(localBranches, remoteBranches);
         var tagVerification = CompareRefs(localTags, remoteTags);
+        var report = new ReadinessReport();
+        foreach (var (kind, local, remote) in new[]
+                 { ("Branch", localBranches, remoteBranches), ("Tag", localTags, remoteTags) })
+        {
+            foreach (var name in local.Keys.Union(remote.Keys).Order(StringComparer.Ordinal))
+            {
+                var localHash = local.GetValueOrDefault(name);
+                var remoteHash = remote.GetValueOrDefault(name);
+                report.Checks.Add(new ReadinessCheck($"{kind}: {name}",
+                    localHash is not null && localHash == remoteHash ? "passed" : "failed",
+                    $"Imported Git object: {localHash ?? "absent"}; destination object: {remoteHash ?? "absent"}."));
+            }
+        }
+
+        if (localBranches.Count == 0)
+        {
+            report.Checks.Add(new ReadinessCheck("Imported branches", "failed", "No local branches were found."));
+        }
+
+        var integrity = await commands.RunAsync("git", ["fsck", "--full"], repoPath,
+            cancellationToken: cancellationToken);
+        report.Checks.Add(new ReadinessCheck("Git object integrity",
+            integrity.ExitCode == 0 ? "passed" : "failed",
+            integrity.ExitCode == 0 ? "git fsck --full passed." : "git fsck failed. Inspect the managed repository before retrying."));
+        var authors = await commands.RunCheckedAsync("git", ["log", "--all", "--format=%aN <%aE>"],
+            repoPath, cancellationToken: cancellationToken);
+        var identities = authors.StandardOutput.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)
+            .Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToList();
+        report.Checks.Add(new ReadinessCheck("Imported author inventory", "warning",
+            $"Review these {identities.Count} identities against the source mapping: " + string.Join("; ", identities)));
+        report.Checks.Add(new ReadinessCheck("Verification scope", "warning",
+            "This compares imported Git refs/object IDs with GitHub and checks local Git integrity. It does not prove SVN history/author completeness, source file parity, build success, or cutover readiness. Cleanup intentionally rewrites history."));
         var verification = new Dictionary<string, object?>
         {
             ["branches_match"] = branchVerification.Match,
@@ -549,7 +589,7 @@ public sealed class PushVerifier(ExternalCommandRunner commands)
             ["missing_tags"] = tagVerification.Missing,
             ["different_tags"] = tagVerification.Different,
             ["extra_tags"] = tagVerification.Extra,
-            ["status"] = branchVerification.Match && tagVerification.Match && localBranches.Count > 0
+            ["status"] = !report.HasBlockingIssues
                 ? "success"
                 : "warning"
         };
@@ -557,7 +597,8 @@ public sealed class PushVerifier(ExternalCommandRunner commands)
         {
             ["success"] = true,
             ["pushed"] = new { branches = remoteBranches.Keys.Order().ToList(), tags = remoteTags.Keys.Order().ToList() },
-            ["verification"] = verification
+            ["verification"] = verification,
+            ["report"] = report
         };
     }
 
@@ -567,7 +608,7 @@ public sealed class PushVerifier(ExternalCommandRunner commands)
         CancellationToken cancellationToken)
     {
         var result = await commands.RunCheckedAsync(
-            "git", ["for-each-ref", "--format=%(objectname)\t%(refname:strip=2)", prefix],
+            "git", ["for-each-ref", "--format=%(objectname)\t%(refname)", prefix],
             repoPath, cancellationToken: cancellationToken);
         return ParseRefs(result.StandardOutput, prefix);
     }
@@ -576,11 +617,13 @@ public sealed class PushVerifier(ExternalCommandRunner commands)
         string repoPath,
         string selector,
         string prefix,
+        IReadOnlyDictionary<string, string?> environment,
         CancellationToken cancellationToken)
     {
         var result = await commands.RunCheckedAsync(
             "git", ["ls-remote", "--refs", selector, "origin"],
-            repoPath, timeout: TimeSpan.FromSeconds(120), cancellationToken: cancellationToken);
+            repoPath, timeout: TimeSpan.FromSeconds(120), environment: environment,
+            cancellationToken: cancellationToken);
         return ParseRefs(result.StandardOutput, prefix);
     }
 

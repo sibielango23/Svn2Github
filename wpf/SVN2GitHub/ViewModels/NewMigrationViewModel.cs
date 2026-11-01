@@ -1,7 +1,10 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using SVN2GitHub.Services;
 using SVN2GitHub.Models;
+using SVN2GitHub.Services;
+using System.Text.RegularExpressions;
+using System.Windows;
+using SVN2GitHub.Views;
 
 namespace SVN2GitHub.ViewModels
 {
@@ -11,16 +14,16 @@ namespace SVN2GitHub.ViewModels
         private readonly NotificationService _notificationService;
 
         [ObservableProperty]
-        private string _svnUrl = "";
+        private string _svnUrl = string.Empty;
 
         [ObservableProperty]
-        private string _githubOrg = "";
+        private string _githubOrg = string.Empty;
 
         [ObservableProperty]
-        private string _githubRepo = "";
+        private string _githubRepo = string.Empty;
 
         [ObservableProperty]
-        private string _githubToken = "";
+        private string _githubToken = string.Empty;
 
         [ObservableProperty]
         private string _trunkPath = "trunk";
@@ -32,16 +35,34 @@ namespace SVN2GitHub.ViewModels
         private string _tagsPath = "tags";
 
         [ObservableProperty]
-        private bool _cleanHistory = false;
+        private bool _cleanHistory;
 
         [ObservableProperty]
-        private bool _isSubmitting = false;
+        [NotifyCanExecuteChangedFor(nameof(PreviousStepCommand))]
+        [NotifyCanExecuteChangedFor(nameof(NextStepCommand))]
+        [NotifyCanExecuteChangedFor(nameof(StartMigrationCommand))]
+        [NotifyCanExecuteChangedFor(nameof(CheckReadinessCommand))]
+        [NotifyCanExecuteChangedFor(nameof(AssessMigrationCommand))]
+        private bool _isSubmitting;
 
         [ObservableProperty]
-        private string? _currentMigrationId = null;
+        [NotifyCanExecuteChangedFor(nameof(PreviousStepCommand))]
+        [NotifyCanExecuteChangedFor(nameof(NextStepCommand))]
+        [NotifyCanExecuteChangedFor(nameof(StartMigrationCommand))]
+        private int _currentStep = 1;
+
+        [ObservableProperty]
+        private string _validationMessage = string.Empty;
+
+        [ObservableProperty]
+        private string? _currentMigrationId;
 
         public List<AuthorCreateRequest> PreparedAuthors { get; private set; } = new();
         public string? PreparedAuthorsSvnUrl { get; private set; }
+        public int PreparedAuthorCount => PreparedAuthors.Count;
+        public string AuthorMappingSummary => PreparedAuthors.Count == 0
+            ? "No custom mapping saved yet. Review authors now or continue with generated placeholders."
+            : $"{PreparedAuthors.Count} author mappings are ready for this source.";
 
         public NewMigrationViewModel()
         {
@@ -49,85 +70,133 @@ namespace SVN2GitHub.ViewModels
             _notificationService = new NotificationService();
         }
 
-        [RelayCommand]
-        private async Task StartMigrationAsync()
+        [RelayCommand(CanExecute = nameof(CanGoBack))]
+        private void PreviousStep()
         {
-            // Validate inputs
-            if (string.IsNullOrWhiteSpace(SvnUrl))
-            {
-                _notificationService.ShowWarning("Please enter SVN URL");
-                return;
-            }
+            ValidationMessage = string.Empty;
+            CurrentStep = Math.Max(1, CurrentStep - 1);
+        }
 
-            if (string.IsNullOrWhiteSpace(GithubOrg))
+        [RelayCommand(CanExecute = nameof(CanCheckReadiness))]
+        private void CheckReadiness()
+        {
+            new ReadinessWindow(CleanHistory)
             {
-                _notificationService.ShowWarning("Please enter GitHub organization");
-                return;
-            }
+                Owner = Application.Current.MainWindow
+            }.ShowDialog();
+        }
 
-            if (string.IsNullOrWhiteSpace(GithubRepo))
-            {
-                _notificationService.ShowWarning("Please enter GitHub repository name");
-                return;
-            }
+        private bool CanCheckReadiness() => !IsSubmitting;
 
-            if (string.IsNullOrWhiteSpace(GithubToken))
+        [RelayCommand(CanExecute = nameof(CanCheckReadiness))]
+        private void AssessMigration()
+        {
+            if (!ValidateSource() || !ValidateDestination())
             {
-                _notificationService.ShowWarning("Please enter GitHub token");
                 return;
             }
 
             if (PreparedAuthors.Count > 0 &&
                 !string.Equals(PreparedAuthorsSvnUrl, SvnUrl, StringComparison.OrdinalIgnoreCase))
             {
-                _notificationService.ShowWarning(
-                    "The SVN URL changed after author mappings were prepared. Configure authors again before starting.");
+                ValidationMessage = "Review author mappings again after changing the SVN URL.";
                 return;
             }
 
-            // Confirm before starting
-            var confirmed = _notificationService.ShowConfirmation(
-                $"Start migration from:\n{SvnUrl}\n\nto:\n{GithubOrg}/{GithubRepo}?\n\n" +
-                "This process may take several hours.",
-                "Confirm Migration");
+            if (!_notificationService.ShowConfirmation(
+                "Assessment will contact SVN and github.com using cached SVN credentials and your GitHub token. " +
+                "It reads visible SVN history and the current trunk inventory; it does not import, create, or push a repository. " +
+                "Large repositories may take several minutes. Continue?", "Read-only migration assessment"))
+            {
+                return;
+            }
 
-            if (!confirmed) return;
+            new ReadinessWindow(CleanHistory, new MigrationRequest
+            {
+                SvnUrl = SvnUrl.Trim(), GithubOrg = GithubOrg.Trim(), GithubRepo = GithubRepo.Trim(),
+                GithubToken = GithubToken, TrunkPath = TrunkPath.Trim(), BranchesPath = BranchesPath.Trim(),
+                TagsPath = TagsPath.Trim(), CleanHistory = CleanHistory, Authors = PreparedAuthors
+            }) { Owner = Application.Current.MainWindow }.ShowDialog();
+        }
+
+        [RelayCommand(CanExecute = nameof(CanGoNext))]
+        private void NextStep()
+        {
+            ValidationMessage = string.Empty;
+            if (CurrentStep == 1 && !ValidateSource())
+            {
+                return;
+            }
+
+            if (CurrentStep == 2 && !ValidateDestination())
+            {
+                return;
+            }
+
+            CurrentStep = Math.Min(3, CurrentStep + 1);
+        }
+
+        [RelayCommand(CanExecute = nameof(CanStart))]
+        private async Task StartMigrationAsync()
+        {
+            if (!ValidateSource() || !ValidateDestination())
+            {
+                return;
+            }
+
+            if (PreparedAuthors.Count > 0 &&
+                !string.Equals(PreparedAuthorsSvnUrl, SvnUrl, StringComparison.OrdinalIgnoreCase))
+            {
+                ValidationMessage =
+                    "The SVN URL changed after author mappings were prepared. Review the mappings again before starting.";
+                return;
+            }
+
+            var historyWarning = CleanHistory
+                ? "\n\nHistory cleaning is enabled and will rewrite commit IDs."
+                : string.Empty;
+            var confirmed = _notificationService.ShowConfirmation(
+                $"Source: {SvnUrl}\nDestination: {GithubOrg}/{GithubRepo}\n" +
+                $"Author mappings: {(PreparedAuthors.Count == 0 ? "generated defaults" : PreparedAuthors.Count)}" +
+                $"{historyWarning}\n\nThe migration may take several hours. Completed stages are checkpointed and can be resumed after a failure. If the SVN import itself is interrupted, that import must be repeated. Continue?",
+                "Review migration");
+
+            if (!confirmed)
+            {
+                return;
+            }
 
             IsSubmitting = true;
+            ValidationMessage = string.Empty;
 
             try
             {
                 var request = new MigrationRequest
                 {
-                    SvnUrl = SvnUrl,
-                    GithubOrg = GithubOrg,
-                    GithubRepo = GithubRepo,
+                    SvnUrl = SvnUrl.Trim(),
+                    GithubOrg = GithubOrg.Trim(),
+                    GithubRepo = GithubRepo.Trim(),
                     GithubToken = GithubToken,
-                    TrunkPath = TrunkPath,
-                    BranchesPath = BranchesPath,
-                    TagsPath = TagsPath,
+                    TrunkPath = TrunkPath.Trim(),
+                    BranchesPath = BranchesPath.Trim(),
+                    TagsPath = TagsPath.Trim(),
                     CleanHistory = CleanHistory,
                     Authors = PreparedAuthors
                 };
 
                 var response = await _apiService.CreateMigrationAsync(request);
                 CurrentMigrationId = response.Id;
-                PreparedAuthors = new List<AuthorCreateRequest>();
-                PreparedAuthorsSvnUrl = null;
-
                 _notificationService.ShowSuccess(
-                    $"Migration started successfully!\n\nID: {response.Id}\n\n" +
-                    "You can monitor progress from the Dashboard.",
-                    "Migration Started");
-
-                // Clear form
+                    $"Your migration was queued.\n\nID: {response.Id}\n\nOpen the dashboard to follow its progress.",
+                    "Migration queued");
                 ClearForm();
             }
-            catch (Exception ex)
+            catch (Exception exception)
             {
+                ValidationMessage = "The migration could not be queued. Check the API is running, then try again.";
                 _notificationService.ShowError(
-                    $"Failed to start migration:\n{ex.Message}",
-                    "Error");
+                    $"Failed to start migration:\n{exception.Message}",
+                    "Migration not started");
             }
             finally
             {
@@ -138,16 +207,19 @@ namespace SVN2GitHub.ViewModels
         [RelayCommand]
         private void ClearForm()
         {
-            SvnUrl = "";
-            GithubOrg = "";
-            GithubRepo = "";
-            GithubToken = "";
+            ValidationMessage = string.Empty;
+            CurrentStep = 1;
+            SvnUrl = string.Empty;
+            GithubOrg = string.Empty;
+            GithubRepo = string.Empty;
+            GithubToken = string.Empty;
             TrunkPath = "trunk";
             BranchesPath = "branches";
             TagsPath = "tags";
             CleanHistory = false;
             PreparedAuthors = new List<AuthorCreateRequest>();
             PreparedAuthorsSvnUrl = null;
+            NotifyAuthorMappingChanged();
         }
 
         public void SetPreparedAuthors(IEnumerable<Author> authors, string svnUrl)
@@ -160,6 +232,69 @@ namespace SVN2GitHub.ViewModels
                 Verified = author.Verified
             }).ToList();
             PreparedAuthorsSvnUrl = svnUrl;
+            NotifyAuthorMappingChanged();
+        }
+
+        private bool CanGoBack() => CurrentStep > 1 && !IsSubmitting;
+        private bool CanGoNext() => CurrentStep < 3 && !IsSubmitting;
+        private bool CanStart() => CurrentStep == 3 && !IsSubmitting;
+
+        private bool ValidateSource()
+        {
+            if (!Uri.TryCreate(SvnUrl.Trim(), UriKind.Absolute, out var uri) ||
+                uri.Host.Length == 0 ||
+                uri.UserInfo.Length > 0 ||
+                uri.Scheme is not ("http" or "https" or "svn"))
+            {
+                ValidationMessage =
+                    "Enter a valid SVN URL using https://, http://, or svn://. Do not put credentials in the URL.";
+                return false;
+            }
+
+            if (new[] { TrunkPath, BranchesPath, TagsPath }
+                .Any(path => string.IsNullOrWhiteSpace(path) ||
+                             path.Contains('\n') ||
+                             path.Contains('\r')))
+            {
+                ValidationMessage =
+                    "Trunk, branches, and tags paths are required. Use paths relative to the repository URL.";
+                return false;
+            }
+
+            return true;
+        }
+
+        private bool ValidateDestination()
+        {
+            if (!Regex.IsMatch(GithubOrg.Trim(),
+                    @"\A[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?\z"))
+            {
+                ValidationMessage = "Enter a valid GitHub organization or account name.";
+                return false;
+            }
+
+            if (!Regex.IsMatch(GithubRepo.Trim(), @"\A[A-Za-z0-9._-]{1,100}\z") ||
+                GithubRepo.Trim() is "." or "..")
+            {
+                ValidationMessage =
+                    "Enter a valid repository name using letters, numbers, dots, hyphens, or underscores.";
+                return false;
+            }
+
+            if (string.IsNullOrWhiteSpace(GithubToken))
+            {
+                ValidationMessage =
+                    "Enter a GitHub token with permission to create and push to the destination repository.";
+                return false;
+            }
+
+            return true;
+        }
+
+        private void NotifyAuthorMappingChanged()
+        {
+            OnPropertyChanged(nameof(PreparedAuthorCount));
+            OnPropertyChanged(nameof(AuthorMappingSummary));
         }
     }
 }

@@ -1,239 +1,293 @@
 <UserControl x:Class="SVN2GitHub.Views.DashboardView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes">
+             xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
+             xmlns:vm="clr-namespace:SVN2GitHub.ViewModels">
+    <UserControl.Resources>
+        <Style x:Key="SummaryButton" TargetType="Button"
+               BasedOn="{StaticResource MaterialDesignOutlinedButton}">
+            <Setter Property="Width" Value="150"/>
+            <Setter Property="Height" Value="92"/>
+            <Setter Property="Margin" Value="0,0,10,10"/>
+            <Setter Property="Padding" Value="16,12"/>
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="Foreground" Value="{DynamicResource MaterialDesign.Brush.Foreground}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource MaterialDesignDivider}"/>
+        </Style>
+        <Style x:Key="RowAction" TargetType="Button"
+               BasedOn="{StaticResource MaterialDesignFlatButton}">
+            <Setter Property="Height" Value="36"/>
+            <Setter Property="Padding" Value="12,0"/>
+            <Setter Property="Margin" Value="0,4,8,0"/>
+        </Style>
+    </UserControl.Resources>
 
-    <Grid Margin="24">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="*"/>
-            <RowDefinition Height="Auto"/>
-        </Grid.RowDefinitions>
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <Grid Margin="24" MaxWidth="1200">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
 
-        <!-- Header with Refresh -->
-        <Grid Grid.Row="0" Margin="0,0,0,24">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="Auto"/>
-            </Grid.ColumnDefinitions>
-
-            <StackPanel Grid.Column="0">
-                <TextBlock Text="Dashboard"
-                           Style="{StaticResource MaterialDesignHeadline4TextBlock}"
-                           Margin="0,0,0,8"/>
-                <TextBlock Text="Monitor your SVN to GitHub migration progress"
-                           Style="{StaticResource MaterialDesignBody1TextBlock}"
-                           Opacity="0.7"/>
+            <StackPanel Grid.Row="0" Margin="0,0,0,20">
+                <TextBlock Text="Your migration workspace" FontSize="26" FontWeight="SemiBold"
+                           TextWrapping="Wrap"/>
+                <TextBlock Text="Monitor progress, find a repository, and keep your migrations moving."
+                           TextWrapping="Wrap" Opacity="0.68" Margin="0,6,0,16"/>
+                <WrapPanel>
+                    <Button Command="{Binding NewMigrationCommand}" Height="40" Padding="16,0"
+                            Style="{StaticResource MaterialDesignRaisedButton}" Margin="0,0,10,8">
+                        <StackPanel Orientation="Horizontal">
+                            <materialDesign:PackIcon Kind="Plus" Width="18" Height="18" Margin="0,0,8,0"/>
+                            <TextBlock Text="New migration" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+                    <Button Content="Check readiness" Command="{Binding CheckReadinessCommand}" Height="40" Padding="14,0"
+                            Style="{StaticResource MaterialDesignOutlinedButton}" Margin="0,0,10,8"/>
+                    <Button Command="{Binding ConfigureAiCommand}" Height="40" Padding="14,0"
+                            Style="{StaticResource MaterialDesignOutlinedButton}" Margin="0,0,10,8">
+                        <StackPanel Orientation="Horizontal">
+                            <materialDesign:PackIcon Kind="CogOutline" Width="18" Height="18" Margin="0,0,8,0"/>
+                            <TextBlock Text="AI settings" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+                    <Button Command="{Binding RefreshCommand}" Height="40" Padding="14,0"
+                            Style="{StaticResource MaterialDesignFlatButton}" Margin="0,0,0,8">
+                        <StackPanel Orientation="Horizontal">
+                            <materialDesign:PackIcon Kind="Refresh" Width="18" Height="18" Margin="0,0,8,0"/>
+                            <TextBlock Text="Refresh" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+                </WrapPanel>
             </StackPanel>
 
-            <StackPanel Grid.Column="1" Orientation="Horizontal">
-                <Button Content="AI SETTINGS"
-                        Command="{Binding ConfigureAiCommand}"
-                        Style="{StaticResource MaterialDesignOutlinedButton}"
-                        Margin="0,0,8,0"
-                        VerticalAlignment="Center"/>
-                <Button Command="{Binding RefreshAsyncCommand}"
-                        Style="{StaticResource MaterialDesignIconButton}"
-                        ToolTip="Refresh">
-                    <materialDesign:PackIcon Kind="Refresh" Width="24" Height="24"/>
+            <WrapPanel Grid.Row="1" Margin="0,0,0,10">
+                <Button Command="{Binding SelectFilterCommand}" CommandParameter="{x:Static vm:DashboardFilter.All}"
+                        ToolTip="Show all migrations" AutomationProperties.Name="Show all migrations">
+                    <Button.Style>
+                        <Style TargetType="Button" BasedOn="{StaticResource SummaryButton}">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding SelectedFilter}" Value="{x:Static vm:DashboardFilter.All}">
+                                    <Setter Property="BorderBrush" Value="{DynamicResource MaterialDesign.Brush.Primary}"/>
+                                    <Setter Property="BorderThickness" Value="2"/>
+                                    <Setter Property="Background" Value="#123F51B5"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Button.Style>
+                    <StackPanel>
+                        <TextBlock Text="{Binding TotalMigrations}" FontSize="28" FontWeight="SemiBold"/>
+                        <TextBlock Text="All migrations" FontSize="12" Margin="0,4,0,0"/>
+                    </StackPanel>
                 </Button>
-            </StackPanel>
-        </Grid>
+                <Button Command="{Binding SelectFilterCommand}" CommandParameter="{x:Static vm:DashboardFilter.Active}"
+                        ToolTip="Show queued and running migrations" AutomationProperties.Name="Show active migrations">
+                    <Button.Style>
+                        <Style TargetType="Button" BasedOn="{StaticResource SummaryButton}">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding SelectedFilter}" Value="{x:Static vm:DashboardFilter.Active}">
+                                    <Setter Property="BorderBrush" Value="#0288D1"/>
+                                    <Setter Property="BorderThickness" Value="2"/>
+                                    <Setter Property="Background" Value="#120288D1"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Button.Style>
+                    <StackPanel>
+                        <TextBlock Text="{Binding ActiveMigrations}" FontSize="28" FontWeight="SemiBold" Foreground="#0277BD"/>
+                        <TextBlock Text="Queued / running" FontSize="12" Margin="0,4,0,0"/>
+                    </StackPanel>
+                </Button>
+                <Button Command="{Binding SelectFilterCommand}" CommandParameter="{x:Static vm:DashboardFilter.Completed}"
+                        ToolTip="Show completed migrations" AutomationProperties.Name="Show completed migrations">
+                    <Button.Style>
+                        <Style TargetType="Button" BasedOn="{StaticResource SummaryButton}">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding SelectedFilter}" Value="{x:Static vm:DashboardFilter.Completed}">
+                                    <Setter Property="BorderBrush" Value="#2E7D32"/>
+                                    <Setter Property="BorderThickness" Value="2"/>
+                                    <Setter Property="Background" Value="#122E7D32"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Button.Style>
+                    <StackPanel>
+                        <TextBlock Text="{Binding CompletedMigrations}" FontSize="28" FontWeight="SemiBold" Foreground="#2E7D32"/>
+                        <TextBlock Text="Completed" FontSize="12" Margin="0,4,0,0"/>
+                    </StackPanel>
+                </Button>
+                <Button Command="{Binding SelectFilterCommand}" CommandParameter="{x:Static vm:DashboardFilter.Failed}"
+                        ToolTip="Show migrations needing attention" AutomationProperties.Name="Show failed migrations">
+                    <Button.Style>
+                        <Style TargetType="Button" BasedOn="{StaticResource SummaryButton}">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding SelectedFilter}" Value="{x:Static vm:DashboardFilter.Failed}">
+                                    <Setter Property="BorderBrush" Value="#C62828"/>
+                                    <Setter Property="BorderThickness" Value="2"/>
+                                    <Setter Property="Background" Value="#12C62828"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Button.Style>
+                    <StackPanel>
+                        <TextBlock Text="{Binding FailedMigrations}" FontSize="28" FontWeight="SemiBold" Foreground="#C62828"/>
+                        <TextBlock Text="Needs attention" FontSize="12" Margin="0,4,0,0"/>
+                    </StackPanel>
+                </Button>
+            </WrapPanel>
 
-        <!-- Stats Cards -->
-        <Grid Grid.Row="1" Margin="0,0,0,24">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="*"/>
-            </Grid.ColumnDefinitions>
-
-            <!-- Total Migrations -->
-            <materialDesign:Card Grid.Column="0"
-                                 Padding="24"
-                                 Margin="0,0,8,0"
-                                 materialDesign:ElevationAssist.Elevation="Dp2">
+            <materialDesign:Card Grid.Row="2" Padding="18">
                 <StackPanel>
-                    <materialDesign:PackIcon Kind="Database"
-                                            Width="32"
-                                            Height="32"
-                                            Foreground="{DynamicResource PrimaryHueMidBrush}"
-                                            Margin="0,0,0,8"/>
-                    <TextBlock Text="{Binding TotalMigrations}"
-                               Style="{StaticResource MaterialDesignHeadline3TextBlock}"/>
-                    <TextBlock Text="Total"
-                               Style="{StaticResource MaterialDesignBody2TextBlock}"
-                               Opacity="0.7"/>
-                </StackPanel>
-            </materialDesign:Card>
+                    <Grid Margin="0,0,0,14">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel>
+                            <TextBlock Text="Migration activity" FontSize="18" FontWeight="SemiBold"/>
+                            <TextBlock Text="{Binding VisibleMigrationCount, StringFormat={}{0} matching migrations}"
+                                       FontSize="12" Opacity="0.65" Margin="0,4,0,0"/>
+                        </StackPanel>
+                        <ProgressBar Grid.Column="1" Width="22" Height="22" IsIndeterminate="True"
+                                     Style="{StaticResource MaterialDesignCircularProgressBar}"
+                                     Visibility="{Binding IsLoading, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                    </Grid>
+                    <TextBox Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
+                             Style="{StaticResource MaterialDesignOutlinedTextBox}"
+                             materialDesign:HintAssist.Hint="Search GitHub owner/repository or SVN URL"
+                             AutomationProperties.Name="Search migrations"/>
+                    <Button Content="Reset filters" Command="{Binding ClearFiltersCommand}"
+                            Style="{StaticResource MaterialDesignFlatButton}" HorizontalAlignment="Left"
+                            Margin="0,4,0,8"/>
 
-            <!-- Active Migrations -->
-            <materialDesign:Card Grid.Column="1"
-                                 Padding="24"
-                                 Margin="4,0"
-                                 materialDesign:ElevationAssist.Elevation="Dp2">
-                <StackPanel>
-                    <materialDesign:PackIcon Kind="ProgressClock"
-                                            Width="32"
-                                            Height="32"
-                                            Foreground="#3B6DFF"
-                                            Margin="0,0,0,8"/>
-                    <TextBlock Text="{Binding ActiveMigrations}"
-                               Style="{StaticResource MaterialDesignHeadline3TextBlock}"/>
-                    <TextBlock Text="Active"
-                               Style="{StaticResource MaterialDesignBody2TextBlock}"
-                               Opacity="0.7"/>
-                </StackPanel>
-            </materialDesign:Card>
-
-            <!-- Completed Migrations -->
-            <materialDesign:Card Grid.Column="2"
-                                 Padding="24"
-                                 Margin="4,0"
-                                 materialDesign:ElevationAssist.Elevation="Dp2">
-                <StackPanel>
-                    <materialDesign:PackIcon Kind="CheckCircle"
-                                            Width="32"
-                                            Height="32"
-                                            Foreground="#6EE7B7"
-                                            Margin="0,0,0,8"/>
-                    <TextBlock Text="{Binding CompletedMigrations}"
-                               Style="{StaticResource MaterialDesignHeadline3TextBlock}"/>
-                    <TextBlock Text="Completed"
-                               Style="{StaticResource MaterialDesignBody2TextBlock}"
-                               Opacity="0.7"/>
-                </StackPanel>
-            </materialDesign:Card>
-
-            <!-- Failed Migrations -->
-            <materialDesign:Card Grid.Column="3"
-                                 Padding="24"
-                                 Margin="8,0,0,0"
-                                 materialDesign:ElevationAssist.Elevation="Dp2">
-                <StackPanel>
-                    <materialDesign:PackIcon Kind="AlertCircle"
-                                            Width="32"
-                                            Height="32"
-                                            Foreground="#EF4444"
-                                            Margin="0,0,0,8"/>
-                    <TextBlock Text="{Binding FailedMigrations}"
-                               Style="{StaticResource MaterialDesignHeadline3TextBlock}"/>
-                    <TextBlock Text="Failed"
-                               Style="{StaticResource MaterialDesignBody2TextBlock}"
-                               Opacity="0.7"/>
-                </StackPanel>
-            </materialDesign:Card>
-        </Grid>
-
-        <!-- Recent Migrations List -->
-        <materialDesign:Card Grid.Row="2"
-                             Padding="24"
-                             materialDesign:ElevationAssist.Elevation="Dp2">
-            <Grid>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="*"/>
-                </Grid.RowDefinitions>
-
-                <TextBlock Grid.Row="0"
-                           Text="Recent Migrations"
-                           Style="{StaticResource MaterialDesignHeadline6TextBlock}"
-                           Margin="0,0,0,16"/>
-
-                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
-                    <ItemsControl ItemsSource="{Binding RecentMigrations}">
+                    <ItemsControl ItemsSource="{Binding FilteredMigrations}">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
                                 <Border BorderBrush="{DynamicResource MaterialDesignDivider}"
-                                       BorderThickness="0,0,0,1"
-                                       Padding="0,12"
-                                       Margin="0,0,0,8">
-                                    <Grid>
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="Auto"/>
-                                            <ColumnDefinition Width="Auto"/>
-                                            <ColumnDefinition Width="Auto"/>
-                                        </Grid.ColumnDefinitions>
-
-                                        <StackPanel Grid.Column="0">
-                                            <TextBlock Style="{StaticResource MaterialDesignSubtitle1TextBlock}">
-                                                <Run Text="{Binding GithubOrg}"/>
-                                                <Run Text="/"/>
-                                                <Run Text="{Binding GithubRepo}" FontWeight="Bold"/>
+                                        BorderThickness="0,1,0,0" Padding="0,16">
+                                    <StackPanel>
+                                        <TextBlock FontSize="16" FontWeight="SemiBold" TextWrapping="Wrap">
+                                            <Run Text="{Binding GithubOrg}"/><Run Text="/"/><Run Text="{Binding GithubRepo}"/>
+                                        </TextBlock>
+                                        <TextBlock Text="{Binding SvnUrl}" FontSize="12" Opacity="0.62"
+                                                   TextTrimming="CharacterEllipsis" ToolTip="{Binding SvnUrl}" Margin="0,5,0,10"/>
+                                        <Grid Margin="0,0,0,8">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Text="{Binding Status}" FontSize="12" FontWeight="SemiBold">
+                                                <TextBlock.Style>
+                                                    <Style TargetType="TextBlock">
+                                                        <Setter Property="Foreground" Value="#0277BD"/>
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding Status}" Value="completed">
+                                                                <Setter Property="Foreground" Value="#2E7D32"/>
+                                                            </DataTrigger>
+                                                            <DataTrigger Binding="{Binding Status}" Value="failed">
+                                                                <Setter Property="Foreground" Value="#C62828"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </TextBlock.Style>
                                             </TextBlock>
-                                            <TextBlock Text="{Binding SvnUrl}"
-                                                      Style="{StaticResource MaterialDesignCaptionTextBlock}"
-                                                      Opacity="0.7"
-                                                      Margin="0,4,0,0"/>
-                                            <TextBlock Text="{Binding CurrentStep}"
-                                                      Style="{StaticResource MaterialDesignBody2TextBlock}"
-                                                      Margin="0,4,0,0"/>
-                                        </StackPanel>
-
-                                        <StackPanel Grid.Column="1" Margin="16,0">
-                                            <ProgressBar Value="{Binding Progress}"
-                                                        Width="100"
-                                                        Height="4"
-                                                        Margin="0,0,0,4"/>
-                                            <TextBlock Text="{Binding Progress, StringFormat={}{0}%}"
-                                                      Style="{StaticResource MaterialDesignCaptionTextBlock}"
-                                                      HorizontalAlignment="Center"/>
-                                        </StackPanel>
-
-                                        <Button Grid.Column="2"
-                                                Command="{Binding DataContext.AskAiCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                                CommandParameter="{Binding}"
-                                                Style="{StaticResource MaterialDesignOutlinedButton}"
-                                                Content="ASK AI"
-                                                Height="32"
-                                                Margin="0,0,8,0"/>
-                                        <Button Grid.Column="3"
-                                                Command="{Binding DataContext.ViewMigrationCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                                CommandParameter="{Binding}"
-                                                Style="{StaticResource MaterialDesignOutlinedButton}"
-                                                Content="VIEW"
-                                                Height="32"/>
-                                    </Grid>
+                                            <TextBlock Grid.Column="1" Text="{Binding Progress, StringFormat={}{0}%}" FontSize="12"/>
+                                        </Grid>
+                                        <ProgressBar Value="{Binding Progress}" Minimum="0" Maximum="100" Height="6"/>
+                                        <TextBlock Text="{Binding CurrentStep}" TextWrapping="Wrap" FontSize="12"
+                                                   Opacity="0.76" Margin="0,8,0,0"/>
+                                        <TextBlock Text="{Binding ConversionTimeDisplay}" FontSize="12" TextWrapping="Wrap"
+                                                   Margin="0,6,0,0" FontWeight="SemiBold"
+                                                   ToolTip="Recorded processing time across attempts; excludes queue waits and time between retries."/>
+                                        <TextBlock Text="{Binding Error}" TextWrapping="Wrap" Foreground="#B3261E" FontSize="12" Margin="0,4,0,0"/>
+                                        <TextBlock Text="Cancellation is unavailable during destructive history cleanup. Keep the app open."
+                                                   TextWrapping="Wrap" FontSize="12" Margin="0,4,0,0">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock">
+                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding Status}" Value="cleaning">
+                                                            <Setter Property="Visibility" Value="Visible"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
+                                        <WrapPanel Margin="0,8,0,0">
+                                            <Button Content="Details" Style="{StaticResource RowAction}"
+                                                    Command="{Binding DataContext.ViewMigrationCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                    CommandParameter="{Binding}"/>
+                                            <Button Content="Ask AI" Style="{StaticResource RowAction}"
+                                                    Command="{Binding DataContext.AskAiCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                    CommandParameter="{Binding}"/>
+                                            <Button Content="Resume" Style="{StaticResource RowAction}"
+                                                    Command="{Binding DataContext.ResumeMigrationCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                    CommandParameter="{Binding}"
+                                                    ToolTip="Resume from the last completed stage"
+                                                    Visibility="{Binding CanResume, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                                            <Button Content="Cancel" Style="{StaticResource RowAction}"
+                                                    Command="{Binding DataContext.CancelMigrationCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                    CommandParameter="{Binding}"
+                                                    Visibility="{Binding CanCancel, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                                        </WrapPanel>
+                                    </StackPanel>
                                 </Border>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
-                </ScrollViewer>
-            </Grid>
-        </materialDesign:Card>
 
-        <!-- Status Bar -->
-        <materialDesign:Card Grid.Row="3"
-                             Padding="12,8"
-                             Margin="0,16,0,0"
-                             materialDesign:ElevationAssist.Elevation="Dp1">
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
+                    <StackPanel Margin="8,18" Visibility="{Binding NoMatchingMigrations, Converter={StaticResource BooleanToVisibilityConverter}}">
+                        <TextBlock Text="No migrations match your filters" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                        <TextBlock Text="Try another repository name or reset the filters." TextWrapping="Wrap"
+                                   Opacity="0.65" Margin="0,6,0,0"/>
+                    </StackPanel>
+                    <StackPanel Margin="8,18">
+                        <StackPanel.Style>
+                            <Style TargetType="StackPanel">
+                                <Setter Property="Visibility" Value="Visible"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding HasMigrations}" Value="True">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding IsLoading}" Value="True">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </StackPanel.Style>
+                        <TextBlock Text="Ready for your first migration?" FontSize="16" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                        <TextBlock Text="Set up your SVN source and GitHub destination. Progress and results will appear here."
+                                   TextWrapping="Wrap" Opacity="0.65" Margin="0,6,0,12"/>
+                        <Button Content="Set up a migration" Command="{Binding NewMigrationCommand}"
+                                Style="{StaticResource MaterialDesignOutlinedButton}" HorizontalAlignment="Left"/>
+                    </StackPanel>
+                </StackPanel>
+            </materialDesign:Card>
 
-                <materialDesign:PackIcon Grid.Column="0"
-                                        Kind="Information"
-                                        VerticalAlignment="Center"
-                                        Margin="0,0,8,0"/>
-
-                <TextBlock Grid.Column="1"
-                           Text="{Binding StatusMessage}"
-                           Style="{StaticResource MaterialDesignCaptionTextBlock}"
-                           VerticalAlignment="Center"/>
-
-                <ProgressBar Grid.Column="2"
-                            Style="{StaticResource MaterialDesignCircularProgressBar}"
-                            Width="16"
-                            Height="16"
-                            IsIndeterminate="True"
-                            Visibility="{Binding IsLoading, Converter={StaticResource BooleanToVisibilityConverter}}"/>
-            </Grid>
-        </materialDesign:Card>
-    </Grid>
+            <Border Grid.Row="3" Padding="12" Margin="0,12,0,0" CornerRadius="8"
+                    Background="{DynamicResource MaterialDesign.Brush.Surface}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <Ellipse Width="8" Height="8" Margin="0,4,10,0" VerticalAlignment="Top">
+                        <Ellipse.Style>
+                            <Style TargetType="Ellipse">
+                                <Setter Property="Fill" Value="#C77700"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsLive}" Value="True">
+                                        <Setter Property="Fill" Value="#2E7D32"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Ellipse.Style>
+                    </Ellipse>
+                    <TextBlock Grid.Column="1" Text="{Binding StatusMessage}" TextWrapping="Wrap" FontSize="12" Opacity="0.76"/>
+                </Grid>
+            </Border>
+        </Grid>
+    </ScrollViewer>
 </UserControl>

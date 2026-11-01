@@ -8,10 +8,15 @@ namespace SVN2GitHub.Services
 {
     public sealed class AiProviderSettingsStore
     {
-        private readonly string _settingsPath = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "SVN2GitHub",
-            "ai-settings.json");
+        private readonly string _settingsPath;
+
+        public AiProviderSettingsStore(string? settingsPath = null)
+        {
+            _settingsPath = settingsPath ?? Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "SVN2GitHub",
+                "ai-settings.json");
+        }
 
         public AiProviderSettings? Load()
         {
@@ -25,21 +30,24 @@ namespace SVN2GitHub.Services
                 ?? throw new InvalidDataException("The saved AI settings file is invalid.");
 
             if (!Enum.IsDefined(stored.Provider) ||
-                string.IsNullOrWhiteSpace(stored.Model) ||
-                string.IsNullOrWhiteSpace(stored.EncryptedApiKey))
+                string.IsNullOrWhiteSpace(stored.Model))
             {
                 throw new InvalidDataException("The saved AI settings are incomplete or invalid.");
             }
 
-            var encryptedKey = Convert.FromBase64String(stored.EncryptedApiKey);
-            var decryptedKey = ProtectedData.Unprotect(
-                encryptedKey,
-                optionalEntropy: null,
-                scope: DataProtectionScope.CurrentUser);
-            var apiKey = Encoding.UTF8.GetString(decryptedKey);
-            if (string.IsNullOrWhiteSpace(apiKey))
+            var apiKey = string.Empty;
+            if (!string.IsNullOrWhiteSpace(stored.EncryptedApiKey))
             {
-                throw new InvalidDataException("The saved AI API key is empty.");
+                var encryptedKey = Convert.FromBase64String(stored.EncryptedApiKey);
+                var decryptedKey = ProtectedData.Unprotect(
+                    encryptedKey,
+                    optionalEntropy: null,
+                    scope: DataProtectionScope.CurrentUser);
+                apiKey = Encoding.UTF8.GetString(decryptedKey);
+                if (string.IsNullOrWhiteSpace(apiKey))
+                {
+                    throw new InvalidDataException("The saved AI API key is empty.");
+                }
             }
 
             return new AiProviderSettings
@@ -66,6 +74,31 @@ namespace SVN2GitHub.Services
                 EncryptedApiKey = Convert.ToBase64String(encryptedKey)
             };
 
+            Write(stored);
+        }
+
+        public void ClearApiKey()
+        {
+            if (!File.Exists(_settingsPath))
+            {
+                return;
+            }
+
+            var stored = JsonSerializer.Deserialize<StoredSettings>(
+                File.ReadAllText(_settingsPath))
+                ?? throw new InvalidDataException("The saved AI settings file is invalid.");
+
+            if (!Enum.IsDefined(stored.Provider) || string.IsNullOrWhiteSpace(stored.Model))
+            {
+                throw new InvalidDataException("The saved AI settings are incomplete or invalid.");
+            }
+
+            stored.EncryptedApiKey = string.Empty;
+            Write(stored);
+        }
+
+        private void Write(StoredSettings stored)
+        {
             var directory = Path.GetDirectoryName(_settingsPath)
                 ?? throw new InvalidOperationException("The AI settings path has no parent directory.");
             Directory.CreateDirectory(directory);

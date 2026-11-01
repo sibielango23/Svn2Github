@@ -17,3 +17,16 @@ Users should review this fallback before relying on imported commit identity.
 
 Persisted author maps are stored alongside migration state in
 `data/local_migrations.sqlite3`; GitHub tokens are not part of that record.
+Portable API storage instead uses `%LOCALAPPDATA%\SVN2GitHub\data` by default.
+The queue checkpoints completed author mapping, recreates the workspace
+authors file from persisted mappings during Resume when possible, and fails
+explicitly if required checkpoint artifacts cannot be recovered.
+
+The three-step wizard presents author review on step 3 and rejects a saved
+mapping for a changed SVN URL. Extraction's 5,000-entry limit should not be
+described as complete full-history author coverage.
+See [Author guide](AUTHOR_MAPPING_GUIDE.md),
+[API reference](../api/README.md), and [Portable package](../PORTABLE_PACKAGE.md).
+Local readiness does not run author extraction or validate full-history
+coverage; its warning preserves the distinction between tool availability
+and actual migration readiness.

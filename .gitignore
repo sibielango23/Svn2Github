@@ -10,10 +10,12 @@
 *.sqlite3
 /data/*.json
 temp/
+/artifacts/
 
 # .NET build output
 **/bin/
 **/obj/
+*_wpftmp.csproj
 *.log
 
 # Editor and operating-system files

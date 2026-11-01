@@ -1,4 +1,5 @@
 using System.Net.Http;
+using System.IO;
 using System.Net.Http.Json;
 using System.Text.Json;
 using SVN2GitHub.Models;
@@ -10,13 +11,13 @@ namespace SVN2GitHub.Services
         private readonly HttpClient _httpClient;
         private readonly string _baseUrl;
 
-        public ApiService(string baseUrl = "http://127.0.0.1:5000")
+        public ApiService(string? baseUrl = null, HttpClient? httpClient = null)
         {
-            _baseUrl = baseUrl;
-            _httpClient = new HttpClient
-            {
-                BaseAddress = new Uri(_baseUrl)
-            };
+            _baseUrl = baseUrl
+                ?? Environment.GetEnvironmentVariable("SVN2GITHUB_API_URL")
+                ?? "http://127.0.0.1:5000";
+            _httpClient = httpClient ?? new HttpClient();
+            _httpClient.BaseAddress = new Uri(_baseUrl);
         }
 
         public async Task<bool> IsHealthyAsync()
@@ -62,6 +63,17 @@ namespace SVN2GitHub.Services
             }
         }
 
+        public async Task<MigrationDetail> GetMigrationSnapshotAsync(
+            string migrationId,
+            CancellationToken cancellationToken = default)
+        {
+            var response = await _httpClient.GetAsync(
+                $"/api/migrations/{migrationId}", cancellationToken);
+            response.EnsureSuccessStatusCode();
+            return await response.Content.ReadFromJsonAsync<MigrationDetail>(cancellationToken)
+                ?? throw new InvalidDataException("The API returned empty migration details.");
+        }
+
         public async Task<MigrationResponse> CreateMigrationAsync(MigrationRequest request)
         {
             var response = await _httpClient.PostAsJsonAsync("/api/migrations", request);
@@ -70,17 +82,38 @@ namespace SVN2GitHub.Services
                 ?? throw new Exception("Failed to create migration");
         }
 
-        public async Task<bool> CancelMigrationAsync(string migrationId)
+        public async Task ResumeMigrationAsync(string migrationId, string githubToken)
         {
-            try
-            {
-                var response = await _httpClient.DeleteAsync($"/api/migrations/{migrationId}");
-                return response.IsSuccessStatusCode;
-            }
-            catch
-            {
-                return false;
-            }
+            var response = await _httpClient.PostAsJsonAsync(
+                $"/api/migrations/{migrationId}/resume",
+                new ResumeMigrationRequest { GithubToken = githubToken });
+            response.EnsureSuccessStatusCode();
+        }
+
+        public async Task<ReadinessReport> CheckReadinessAsync(
+            bool cleanHistory,
+            CancellationToken cancellationToken = default)
+        {
+            var response = await _httpClient.PostAsJsonAsync(
+                "/api/readiness", new { CleanHistory = cleanHistory }, cancellationToken);
+            response.EnsureSuccessStatusCode();
+            return await response.Content.ReadFromJsonAsync<ReadinessReport>(cancellationToken)
+                ?? throw new InvalidDataException("The API returned an empty readiness report.");
+        }
+
+        public async Task<ReadinessReport> AssessMigrationAsync(
+            MigrationRequest request, CancellationToken cancellationToken = default)
+        {
+            using var response = await _httpClient.PostAsJsonAsync("/api/assessment", request, cancellationToken);
+            response.EnsureSuccessStatusCode();
+            return await response.Content.ReadFromJsonAsync<ReadinessReport>(cancellationToken)
+                ?? throw new InvalidDataException("The API returned an empty assessment report.");
+        }
+
+        public async Task CancelMigrationAsync(string migrationId)
+        {
+            using var response = await _httpClient.DeleteAsync($"/api/migrations/{migrationId}");
+            response.EnsureSuccessStatusCode();
         }
 
         // Author Mapping APIs

@@ -24,6 +24,8 @@ Describe how you think this feature should work.
 ## 🎨 UI/UX Mockup (Optional)
 
 If this involves UI changes, include mockups or sketches.
+Describe behavior with the right-side AI panel open and at a narrow window
+size. State whether source and portable deployments should both support it.
 
 ## 🔧 Alternative Solutions
 
@@ -42,6 +44,10 @@ What needs to be true for this feature to be considered complete?
 - [ ] Criterion 1
 - [ ] Criterion 2
 - [ ] Criterion 3
+
+Where relevant, include checkpoint/retry behavior, preservation of local data,
+credential handling, and portable-package validation. Safe user cancellation
+and arbitrary-revision resume are not currently supported.
 
 ## 🔗 Related Issues
 

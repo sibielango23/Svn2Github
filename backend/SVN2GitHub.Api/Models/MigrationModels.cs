@@ -53,7 +53,50 @@ public sealed class MigrationDetail
     public List<string> Logs { get; set; } = [];
     public string CreatedAt { get; set; } = string.Empty;
     public string UpdatedAt { get; set; } = string.Empty;
+    public double? ElapsedSeconds { get; set; }
+    public DateTimeOffset? RunningSince { get; set; }
     public string? Error { get; set; }
+    public bool CleanHistory { get; set; }
+    public string LastCompletedStage { get; set; } = MigrationStages.None;
+    public bool CanResume => Status == "failed";
+    public bool CanCancel => Status is "pending" or "analyzing" or "mapping_authors" or
+        "migrating" or "pushing";
+    public ReadinessReport? VerificationReport { get; set; }
+}
+
+public static class MigrationStages
+{
+    public const string None = "none";
+    public const string Analysis = "analysis";
+    public const string Authors = "authors";
+    public const string Import = "import";
+    public const string HistoryCleanup = "history_cleanup";
+    public const string GitHubSetup = "github_setup";
+
+    public static int GetRank(string stage) => stage switch
+    {
+        Analysis => 1,
+        Authors => 2,
+        Import => 3,
+        HistoryCleanup => 4,
+        GitHubSetup => 5,
+        _ => 0
+    };
+
+    public static string GetDisplayName(string stage) => stage switch
+    {
+        Analysis => "SVN analysis",
+        Authors => "author mapping",
+        Import => "SVN import",
+        HistoryCleanup => "history cleanup",
+        GitHubSetup => "GitHub repository setup",
+        _ => "migration start"
+    };
+}
+
+public sealed class ResumeMigrationRequest
+{
+    public string GithubToken { get; set; } = string.Empty;
 }
 
 public sealed class MigrationRecord

@@ -16,9 +16,15 @@ public sealed class MigrationStateStore
     private readonly Dictionary<string, string> _authorSessions = new(StringComparer.Ordinal);
     private readonly Dictionary<string, List<Dictionary<string, string>>> _legacyAuthors = new(StringComparer.Ordinal);
     private readonly string _connectionString;
+    private readonly TimeProvider _timeProvider;
+    public string DataDirectory { get; }
 
-    public MigrationStateStore(IConfiguration configuration, IWebHostEnvironment environment)
+    public MigrationStateStore(
+        IConfiguration configuration,
+        IWebHostEnvironment environment,
+        TimeProvider? timeProvider = null)
     {
+        _timeProvider = timeProvider ?? TimeProvider.System;
         var dataDirectory = configuration["DataDirectory"];
         if (string.IsNullOrWhiteSpace(dataDirectory))
         {
@@ -30,6 +36,7 @@ public sealed class MigrationStateStore
         }
 
         Directory.CreateDirectory(dataDirectory);
+        DataDirectory = Path.GetFullPath(dataDirectory);
         _connectionString = new SqliteConnectionStringBuilder
         {
             DataSource = Path.Combine(dataDirectory, "local_migrations.sqlite3"),
@@ -64,9 +71,12 @@ public sealed class MigrationStateStore
             {
                 if (IsActive(record.Detail.Status))
                 {
+                    // Only saved processing time survives an unclean stop; never count offline time.
+                    record.Detail.RunningSince = null;
                     record.Detail.Status = "failed";
                     record.Detail.Error =
-                        "Backend restarted before this migration completed; start a new migration.";
+                        $"Backend restarted before this migration completed. Resume is available from " +
+                        $"{MigrationStages.GetDisplayName(record.Detail.LastCompletedStage)}.";
                     record.Detail.CurrentStep = "Interrupted by backend restart";
                     record.Detail.UpdatedAt = DateTimeOffset.UtcNow.ToString("O");
                 }
@@ -115,6 +125,7 @@ public sealed class MigrationStateStore
                 SvnUrl = request.SvnUrl.Trim(),
                 GithubOrg = request.GithubOrg,
                 GithubRepo = request.GithubRepo,
+                CleanHistory = request.CleanHistory,
                 Status = "pending",
                 Progress = 0,
                 CurrentStep = "Queued",
@@ -154,6 +165,63 @@ public sealed class MigrationStateStore
         };
     }
 
+    public void StartProcessing(string id)
+    {
+        lock (_sync)
+        {
+            var record = _migrations.TryGetValue(id, out var value)
+                ? value
+                : throw new KeyNotFoundException("Migration not found");
+            if (record.Detail.RunningSince is not null)
+            {
+                throw new InvalidOperationException("Migration processing timer is already running.");
+            }
+
+            record.Detail.ElapsedSeconds ??= 0;
+            record.Detail.RunningSince = _timeProvider.GetUtcNow();
+            Persist(record);
+        }
+    }
+
+    public void SaveProcessingTime(string id)
+    {
+        lock (_sync)
+        {
+            if (_migrations.TryGetValue(id, out var record) && record.Detail.RunningSince is not null)
+            {
+                SampleProcessingTime(record.Detail, stop: false);
+                Persist(record);
+            }
+
+        }
+    }
+
+    public void SaveVerificationReport(string id, ReadinessReport report)
+    {
+        lock (_sync)
+        {
+            if (!_migrations.TryGetValue(id, out var record))
+            {
+                throw new KeyNotFoundException("Migration not found");
+            }
+
+            record.Detail.VerificationReport = report;
+            Persist(record);
+        }
+    }
+
+    private void SampleProcessingTime(MigrationDetail detail, bool stop)
+    {
+        if (detail.RunningSince is not { } started)
+        {
+            return;
+        }
+
+        var now = _timeProvider.GetUtcNow();
+        detail.ElapsedSeconds = (detail.ElapsedSeconds ?? 0) + Math.Max(0, (now - started).TotalSeconds);
+        detail.RunningSince = stop ? null : now;
+    }
+
     public void UpdateMigration(
         string id,
         string status,
@@ -170,13 +238,133 @@ public sealed class MigrationStateStore
             }
 
             var now = DateTimeOffset.UtcNow.ToString("O");
-            record.Detail.Status = status;
-            record.Detail.CurrentStep = step;
+            SampleProcessingTime(record.Detail, stop: status is "completed" or "failed");
+            var stopping = record.Detail.Status == "cancelling" && status is not ("completed" or "failed");
+            record.Detail.Status = stopping ? "cancelling" : status;
+            record.Detail.CurrentStep = stopping ? "Stopping active migration" : step;
             record.Detail.Progress = progress;
             record.Detail.UpdatedAt = now;
             record.Detail.Logs.Add($"{now}: {log}");
             record.Detail.Error = error;
             Persist(record);
+        }
+    }
+
+    public void CompleteStage(
+        string id,
+        string stage,
+        string status,
+        string step,
+        int progress,
+        string log)
+    {
+        if (MigrationStages.GetRank(stage) == 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(stage), "Unknown migration checkpoint.");
+        }
+
+        lock (_sync)
+        {
+            if (!_migrations.TryGetValue(id, out var record))
+            {
+                throw new KeyNotFoundException("Migration not found");
+            }
+
+            var currentRank = MigrationStages.GetRank(record.Detail.LastCompletedStage);
+            if (MigrationStages.GetRank(stage) < currentRank)
+            {
+                throw new InvalidOperationException("Migration checkpoints cannot move backwards.");
+            }
+
+            var now = DateTimeOffset.UtcNow.ToString("O");
+            SampleProcessingTime(record.Detail, stop: false);
+            record.Detail.LastCompletedStage = stage;
+            var stopping = record.Detail.Status == "cancelling";
+            record.Detail.Status = stopping ? "cancelling" : status;
+            record.Detail.CurrentStep = stopping ? "Stopping active migration" : step;
+            record.Detail.Progress = progress;
+            record.Detail.UpdatedAt = now;
+            record.Detail.Logs.Add($"{now}: {log}");
+            record.Detail.Error = null;
+            Persist(record);
+        }
+    }
+
+    public bool TryPrepareResume(string id, string githubToken, out string error)
+    {
+        lock (_sync)
+        {
+            if (string.IsNullOrWhiteSpace(githubToken))
+            {
+                error = "A GitHub token is required to resume the migration.";
+                return false;
+            }
+
+            if (!_migrations.TryGetValue(id, out var record))
+            {
+                error = "Migration not found.";
+                return false;
+            }
+
+            if (record.Detail.Status != "failed")
+            {
+                error = "Only failed or interrupted migrations can be resumed.";
+                return false;
+            }
+
+            var previous = Clone(record);
+            record.Detail.VerificationReport = null;
+            record.GithubToken = githubToken;
+            record.Detail.Status = "pending";
+            record.Detail.CurrentStep =
+                $"Queued to resume after {MigrationStages.GetDisplayName(record.Detail.LastCompletedStage)}";
+            record.Detail.UpdatedAt = DateTimeOffset.UtcNow.ToString("O");
+            record.Detail.Error = null;
+            record.Detail.Logs.Add(
+                $"{record.Detail.UpdatedAt}: Resume requested from " +
+                $"{MigrationStages.GetDisplayName(record.Detail.LastCompletedStage)}");
+            try
+            {
+                Persist(record);
+            }
+            catch
+            {
+                _migrations[id] = previous;
+                throw;
+            }
+
+            error = string.Empty;
+            return true;
+        }
+    }
+
+    public void FailResumeQueueing(string id)
+    {
+        lock (_sync)
+        {
+            if (!_migrations.TryGetValue(id, out var record))
+            {
+                return;
+            }
+
+            record.GithubToken = string.Empty;
+            record.Detail.Status = "failed";
+            record.Detail.CurrentStep = "Resume could not be queued";
+            record.Detail.Error = "The backend could not queue this resume attempt.";
+            record.Detail.UpdatedAt = DateTimeOffset.UtcNow.ToString("O");
+            record.Detail.Logs.Add($"{record.Detail.UpdatedAt}: Resume could not be queued");
+            Persist(record);
+        }
+    }
+
+    public void ClearGithubToken(string id)
+    {
+        lock (_sync)
+        {
+            if (_migrations.TryGetValue(id, out var record))
+            {
+                record.GithubToken = string.Empty;
+            }
         }
     }
 
@@ -428,9 +616,13 @@ public sealed class MigrationStateStore
                 ["logs"] = migration.Logs,
                 ["created_at"] = migration.CreatedAt,
                 ["updated_at"] = migration.UpdatedAt,
+                ["elapsed_seconds"] = migration.ElapsedSeconds,
+                ["running_since"] = migration.RunningSince,
+                ["verification_report"] = migration.VerificationReport,
                 ["error"] = migration.Error,
+                ["clean_history"] = migration.CleanHistory,
+                ["last_completed_stage"] = migration.LastCompletedStage,
                 ["authors_file"] = record.AuthorsFile,
-                ["clean_history"] = record.CleanHistory,
                 ["trunk_path"] = record.TrunkPath,
                 ["branches_path"] = record.BranchesPath,
                 ["tags_path"] = record.TagsPath
@@ -474,7 +666,19 @@ public sealed class MigrationStateStore
             Logs = Strings(storedMigration, "logs"),
             CreatedAt = String(storedMigration, "created_at", "createdAt") ?? string.Empty,
             UpdatedAt = String(storedMigration, "updated_at", "updatedAt") ?? string.Empty,
-            Error = String(storedMigration, "error")
+            ElapsedSeconds = Double(storedMigration, "elapsed_seconds", "elapsedSeconds"),
+            RunningSince = DateTimeOffset.TryParse(
+                String(storedMigration, "running_since", "runningSince"), out var started)
+                ? started : null,
+            Error = String(storedMigration, "error"),
+            VerificationReport = storedMigration.TryGetProperty("verification_report", out var report)
+                && report.ValueKind == JsonValueKind.Object
+                    ? report.Deserialize<ReadinessReport>() : null,
+            CleanHistory = Bool(storedMigration, "clean_history", "cleanHistory"),
+            LastCompletedStage = String(
+                storedMigration,
+                "last_completed_stage",
+                "lastCompletedStage") ?? MigrationStages.None
         };
         var authors = root.TryGetProperty("authors", out var authorArray) &&
                       authorArray.ValueKind == JsonValueKind.Array
@@ -521,6 +725,21 @@ public sealed class MigrationStateStore
             ? result
             : fallback;
 
+    private static double? Double(JsonElement element, params string[] names)
+    {
+        foreach (var name in names)
+        {
+            if (element.TryGetProperty(name, out var value) &&
+                value.ValueKind == JsonValueKind.Number && value.TryGetDouble(out var result) &&
+                double.IsFinite(result) && result >= 0)
+            {
+                return result;
+            }
+        }
+
+        return null;
+    }
+
     private static bool Bool(JsonElement element, params string[] names)
     {
         foreach (var name in names)
@@ -549,14 +768,18 @@ public sealed class MigrationStateStore
             : [];
 
     private static bool IsActive(string status) =>
-        status is "pending" or "analyzing" or "mapping_authors" or
+        status is "pending" or "cancelling" or "analyzing" or "mapping_authors" or
             "migrating" or "cleaning" or "pushing";
 
-    private static MigrationDetail Clone(MigrationDetail detail) =>
-        JsonSerializer.Deserialize<MigrationDetail>(
+    private MigrationDetail Clone(MigrationDetail detail)
+    {
+        var clone = JsonSerializer.Deserialize<MigrationDetail>(
             JsonSerializer.Serialize(detail, JsonOptions), JsonOptions)!;
+        SampleProcessingTime(clone, stop: false);
+        return clone;
+    }
 
-    private static MigrationRecord Clone(MigrationRecord record) =>
+    private MigrationRecord Clone(MigrationRecord record) =>
         new()
         {
             Detail = Clone(record.Detail),

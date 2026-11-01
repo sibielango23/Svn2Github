@@ -5,12 +5,28 @@ using SVN2GitHub.Api.Services;
 var builder = WebApplication.CreateBuilder(args);
 builder.WebHost.UseUrls(
     Environment.GetEnvironmentVariable("SVN2GITHUB_API_URL") ?? "http://127.0.0.1:5000");
+var dataDirectory = Environment.GetEnvironmentVariable("SVN2GITHUB_DATA_DIRECTORY");
+if (!string.IsNullOrWhiteSpace(dataDirectory))
+{
+    builder.Configuration["DataDirectory"] = dataDirectory;
+}
+
+var workspaceDirectory = Environment.GetEnvironmentVariable("SVN2GITHUB_WORKSPACE_DIRECTORY");
+if (!string.IsNullOrWhiteSpace(workspaceDirectory))
+{
+    builder.Configuration["WorkspaceDirectory"] = workspaceDirectory;
+}
+
 builder.Services.ConfigureHttpJsonOptions(options =>
 {
     options.SerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
 });
 builder.Services.AddSingleton<MigrationStateStore>();
 builder.Services.AddSingleton<ExternalCommandRunner>();
+builder.Services.AddSingleton<IExternalCommandRunner>(serviceProvider =>
+    serviceProvider.GetRequiredService<ExternalCommandRunner>());
+builder.Services.AddSingleton<ReadinessService>();
+builder.Services.AddSingleton<MigrationAssessmentService>();
 builder.Services.AddSingleton<RepositoryAnalyzer>();
 builder.Services.AddSingleton<AuthorMapper>();
 builder.Services.AddSingleton<MigrationExecutor>();
@@ -38,6 +54,21 @@ app.MapGet("/api/health", () => Results.Ok(new
     timestamp = DateTimeOffset.UtcNow.ToString("O")
 }));
 
+app.MapPost("/api/readiness", async (
+    ReadinessRequest request,
+    ReadinessService readiness,
+    CancellationToken cancellationToken) =>
+    Results.Ok(await readiness.CheckAsync(request.CleanHistory, cancellationToken)));
+
+app.MapPost("/api/assessment", async (
+    MigrationRequest request, MigrationAssessmentService assessment, CancellationToken cancellationToken) =>
+{
+    var error = ValidateMigration(request);
+    return error is not null
+        ? Results.UnprocessableEntity(new ApiError { Detail = error })
+        : Results.Ok(await assessment.AssessAsync(request, cancellationToken));
+});
+
 app.MapPost("/api/migrations", (MigrationRequest request, MigrationQueue queue) =>
 {
     var validationError = ValidateMigration(request);
@@ -51,6 +82,7 @@ app.MapPost("/api/migrations", (MigrationRequest request, MigrationQueue queue) 
     {
         stateStore.UpdateMigration(response.Id, "failed", "Could not queue migration", 0,
             "Migration could not be queued.", "Migration could not be queued.");
+        stateStore.ClearGithubToken(response.Id);
         return Results.Problem(
             detail: "Migration could not be queued.",
             statusCode: StatusCodes.Status503ServiceUnavailable);
@@ -66,7 +98,40 @@ app.MapGet("/api/migrations/{migrationId}", (string migrationId) =>
         ? Results.Ok(detail)
         : Results.NotFound(new ApiError { Detail = "Migration not found" }));
 
-app.MapDelete("/api/migrations/{migrationId}", (string migrationId) =>
+app.MapPost("/api/migrations/{migrationId}/resume", (
+    string migrationId,
+    ResumeMigrationRequest request,
+    MigrationQueue queue) =>
+{
+    if (string.IsNullOrWhiteSpace(request.GithubToken))
+    {
+        return Results.UnprocessableEntity(new ApiError
+        {
+            Detail = "A GitHub token is required to resume the migration."
+        });
+    }
+
+    if (!queue.TryPrepareResume(migrationId, request.GithubToken, out var error))
+    {
+        return error == "Migration not found."
+            ? Results.NotFound(new ApiError { Detail = error })
+            : Results.Conflict(new ApiError { Detail = error });
+    }
+
+    if (!queue.Enqueue(migrationId))
+    {
+        stateStore.FailResumeQueueing(migrationId);
+        return Results.Problem(
+            detail: "The migration resume could not be queued.",
+            statusCode: StatusCodes.Status503ServiceUnavailable);
+    }
+
+    return Results.Accepted(
+        $"/api/migrations/{migrationId}",
+        stateStore.GetDetail(migrationId));
+});
+
+app.MapDelete("/api/migrations/{migrationId}", (string migrationId, MigrationQueue queue) =>
 {
     var migration = stateStore.GetDetail(migrationId);
     if (migration is null)
@@ -82,9 +147,9 @@ app.MapDelete("/api/migrations/{migrationId}", (string migrationId) =>
         });
     }
 
-    return Results.Json(
-        new ApiError { Detail = "Migration cancellation is not supported while an agent is running" },
-        statusCode: StatusCodes.Status501NotImplemented);
+    return queue.TryCancel(migrationId, out var error)
+        ? Results.Accepted($"/api/migrations/{migrationId}", stateStore.GetDetail(migrationId))
+        : Results.Conflict(new ApiError { Detail = error });
 });
 
 app.MapGet("/api/stats", () => Results.Ok(stateStore.GetStats()));
